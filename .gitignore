@@ -1,0 +1,24 @@
+# Go build and test artifacts
+*.test
+*.out
+coverage.out
+cover.out
+
+# Local binaries and build output
+bin/
+dist/
+k6
+xk6-kafka
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
+
+# Claude Code personal settings (shared config under .claude/ is committed)
+.claude/settings.local.json
+
+# Local environment files
+.env
+.env.*
+!.env.example
