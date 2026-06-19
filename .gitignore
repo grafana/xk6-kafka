@@ -10,6 +10,10 @@ dist/
 k6
 xk6-kafka
 
+# Generated golangci-lint config (produced by `make lint` from the pinned k6-ci config)
+.golangci-base.yml
+.golangci.yml
+
 # Editor and OS files
 .DS_Store
 .idea/
