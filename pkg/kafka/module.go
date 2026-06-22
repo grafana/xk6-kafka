@@ -132,7 +132,7 @@ func (m *Module) newConnection(call sobek.ConstructorCall) *sobek.Object {
 		}
 	}
 
-	conn, err := openConnection(cfg)
+	conn, err := openConnection(m.vu, cfg)
 	if err != nil {
 		common.Throw(rt, err)
 	}
