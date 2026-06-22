@@ -783,11 +783,26 @@ export interface ConfigEntry {
 export interface TopicConfig {
   /** Name of the topic to create. Required. */
   topic: string;
-  /** How many partitions the topic has. More partitions allow more parallel consumers. */
+  /**
+   * How many partitions the topic has. More partitions allow more parallel
+   * consumers. Ignored when `replicaAssignments` is set — then the number of
+   * assignment entries determines the partition count.
+   * @defaultValue `1`
+   */
   numPartitions?: number;
-  /** How many brokers keep a copy of each partition. Use `1` for a single-broker dev cluster. */
+  /**
+   * How many brokers keep a copy of each partition. Use `1` for a single-broker
+   * dev cluster. Ignored when `replicaAssignments` is set.
+   * @defaultValue `1`
+   */
   replicationFactor?: number;
-  /** Place specific partitions on specific brokers yourself. Overrides `replicationFactor` when set. */
+  /**
+   * Place specific partitions on specific brokers yourself. When set, the
+   * assignment list fully determines the topic's layout — the number of entries
+   * is the partition count and each entry's `replicas` is that partition's
+   * placement — so both `numPartitions` and `replicationFactor` are ignored.
+   * Each entry's `partition` must be unique and non-negative.
+   */
   replicaAssignments?: ReplicaAssignment[];
   /** Extra topic settings, e.g. retention. See {@link ConfigEntry}. */
   configEntries?: ConfigEntry[];
@@ -817,7 +832,11 @@ export class Connection {
    */
   constructor(connectionConfig: ConnectionConfig);
   /**
-   * Create a new topic.
+   * Create a new topic. Call this from the VU context (the default function, or
+   * `setup`/`teardown`) — not the init context, and not after `close`. Throws if
+   * `topic` is empty or a `replicaAssignments` partition is negative or
+   * duplicated (checked before contacting the broker), and if the broker rejects
+   * the request (for example, the topic already exists).
    * @param topicConfig - Name, partition count, replication, and any topic settings.
    * @remarks
    * Create topics in the test's `setup()` function so the topic exists before
@@ -826,12 +845,17 @@ export class Connection {
    */
   createTopic(topicConfig: TopicConfig): void;
   /**
-   * Delete a topic.
+   * Delete a topic. Call this from the VU context (the default function, or
+   * `setup`/`teardown`) — not the init context, and not after `close`. Throws if
+   * `topic` is empty or the broker rejects the request.
    * @param topic - Name of the topic to delete.
    */
   deleteTopic(topic: string): void;
   /**
-   * List the names of all topics on the cluster.
+   * List the names of the cluster's topics. Internal topics (such as
+   * `__consumer_offsets`) are excluded. Call this from the VU context (the
+   * default function, or `setup`/`teardown`) — not the init context, and not
+   * after `close`.
    * @returns Topic names.
    */
   listTopics(): string[];
