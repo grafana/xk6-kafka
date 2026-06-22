@@ -45,10 +45,20 @@ consumer options (group or direct), poll records, and decode them to the
   (RFC3339Nano when `nanoPrecision`), plus `topic`/`partition`/`offset`.
 - **VU context & lifecycle.** Like the producer, `Reader` holds the VU;
   `consume` uses `vu.Context()`, rejects init-context calls (`vu.State() == nil`)
-  and calls after `close`. Rationale: correct cancellation and lifecycle.
+  and calls after `close`. A canceled parent context (VU stopping) is surfaced as
+  a cancellation error — distinct from a `maxWait` timeout — and is not masked by
+  `expectTimeout`. Rationale: correct cancellation and lifecycle.
 - **Group balancers.** range → `RangeBalancer`, round-robin →
   `RoundRobinBalancer`. `GROUP_BALANCER_RACK_AFFINITY` has no franz-go
   equivalent → fall back to a supported balancer (documented accepted-ignored).
+  When `groupBalancers` is unset — or only `GROUP_BALANCER_RACK_AFFINITY`
+  (ignored) is given — default to **range** (the v1 default) rather than
+  franz-go's hidden cooperative-sticky default, which is not in the public API
+  and has one-way migration semantics. `GROUP_BALANCER_RACK_AFFINITY` is never
+  mapped to cooperative-sticky.
+- **Offset validation.** A direct `offset` of `-1` means latest, `0` the
+  beginning, any positive value an exact offset; values below `-1` are rejected
+  at construction rather than silently treated as "latest".
 
 ## Risks / Trade-offs
 

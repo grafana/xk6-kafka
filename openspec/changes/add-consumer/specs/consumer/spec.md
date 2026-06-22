@@ -9,9 +9,13 @@ applying `groupBalancers`, the heartbeat / session / rebalance timeouts, and the
 commit interval. Otherwise (direct mode) it SHALL consume a single partition of
 `topic` via direct assignment — `partition` defaults to `0` when omitted —
 starting at `offset` if set, otherwise `startOffset`; multi-partition
-consumption uses a consumer group. It SHALL also map
-`minBytes`, `maxBytes`, `maxWait`, `isolationLevel`, and `maxAttempts`. `brokers`
-is required; construction SHALL fail when `brokers` is empty.
+consumption uses a consumer group. When `groupBalancers` is unset, the `range`
+balancer is used (the v1 default), not franz-go's cooperative-sticky default. It
+SHALL also map `minBytes`, `maxBytes`, `maxWait`, `isolationLevel`, and
+`maxAttempts` (which, when set, MUST be `>= 0`). `brokers` is required;
+construction SHALL fail when `brokers` is empty, when neither a group target nor
+a direct `topic` is given, when a direct `offset` is below `-1`, or when
+`maxAttempts` is negative.
 
 #### Scenario: Construct a group consumer
 
@@ -26,6 +30,11 @@ is required; construction SHALL fail when `brokers` is empty.
 #### Scenario: Construction fails without brokers
 
 - **WHEN** a Reader is constructed with no `brokers`
+- **THEN** construction throws an error
+
+#### Scenario: Construction fails on an offset below -1
+
+- **WHEN** a direct Reader is constructed with `offset` less than `-1`
 - **THEN** construction throws an error
 
 #### Scenario: startOffset selects the starting point
@@ -58,7 +67,9 @@ init context or after `close`. Each returned message SHALL carry `topic`,
 `maxWait` elapses with fewer than `limit` messages, behavior depends on
 `expectTimeout`: when `true`, it returns whatever it has collected so far
 (possibly an empty array); when `false` (the default), it throws a timeout error.
-(This matches the v1 contract and community behavior.)
+(This matches the v1 contract and community behavior.) A canceled VU context
+(the VU stopping) is distinct from a `maxWait` timeout: it SHALL surface as a
+cancellation error, regardless of `expectTimeout`.
 
 #### Scenario: expectTimeout returns a partial batch
 
@@ -88,7 +99,7 @@ ignored without error: `queueCapacity`, `readBatchTimeout`, `readLagInterval`,
 `partitionWatchInterval`, `watchPartitionChanges`, `joinGroupBackoff`,
 `retentionTime`, `readBackoffMin`/`readBackoffMax`, `connectLogger`, and the
 `GROUP_BALANCER_RACK_AFFINITY` value (no rack-affinity balancer exists in
-franz-go; it falls back to a supported balancer).
+franz-go; it is ignored, and the group uses the `range` default).
 
 #### Scenario: Ignored option does not error
 

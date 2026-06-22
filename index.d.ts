@@ -502,9 +502,9 @@ export const GROUP_BALANCER_ROUND_ROBIN: "group_balancer_round_robin";
 /**
  * Prefer assigning partitions to members in the same rack to reduce cross-rack traffic.
  * @remarks
- * Accepted for v1 compatibility but currently has no equivalent on the pure-Go
- * (franz-go) path, so it may not be honored yet. This may change as the
- * implementation matures.
+ * Accepted for v1 compatibility but has no equivalent on the pure-Go (franz-go)
+ * path, so it is ignored; a group with no other balancer uses the `range`
+ * default. This may change as the implementation matures.
  */
 export const GROUP_BALANCER_RACK_AFFINITY: "group_balancer_rack_affinity";
 /** Consumer group balancing strategies for consuming messages. */
@@ -588,7 +588,10 @@ export interface ReaderConfig {
    * implementation matures.
    */
   readLagInterval?: number;
-  /** Consumer group rebalancing strategies, in priority order. */
+  /**
+   * Consumer group rebalancing strategies, in priority order.
+   * @defaultValue {@link GROUP_BALANCER_RANGE}
+   */
   groupBalancers?: GROUP_BALANCERS[];
   /** Interval between consumer group heartbeats, in nanoseconds (see {@link TIME}). */
   heartbeatInterval?: number;
@@ -656,7 +659,10 @@ export interface ReaderConfig {
    * @remarks Accepted but not yet wired on the pure-Go (franz-go) path; currently has no effect.
    */
   connectLogger?: boolean;
-  /** How many times to retry a read before returning an error. */
+  /**
+   * How many times to retry a read before returning an error. Must be `>= 0`:
+   * `0` disables retries; leave unset to use the client default.
+   */
   maxAttempts?: number;
   /**
    * Whether to include messages from transactions that are not yet committed.
@@ -667,7 +673,7 @@ export interface ReaderConfig {
    * Exact offset to start reading from when reading a single partition without
    * a group. Takes precedence over {@link startOffset} (the symbolic
    * earliest/latest setting) for a direct-partition reader.
-   * @remarks Use `0` to start from the beginning, `-1` for the latest message, or any positive number for a specific offset.
+   * @remarks Use `0` to start from the beginning, `-1` for the latest message, or any positive number for a specific offset. Values below `-1` are rejected.
    */
   offset?: number;
   /** SASL authentication settings. Leave unset to connect without authentication. */
