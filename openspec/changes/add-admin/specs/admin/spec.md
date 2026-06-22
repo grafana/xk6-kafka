@@ -10,8 +10,10 @@ is provided, the assignment list SHALL fully determine the topic's layout — th
 number of entries is the partition count and each entry's `replicas` is that
 partition's placement — so both `numPartitions` and `replicationFactor` are
 ignored. It SHALL validate input locally before
-contacting the broker — rejecting an empty `topic` and any `replicaAssignments`
-entry with a negative or duplicate `partition` — and throw on a bad value. It
+contacting the broker — rejecting an empty `topic`, and rejecting
+`replicaAssignments` unless the `partition` IDs form a contiguous layout from
+`0` to `N-1` (non-negative, unique, no gaps, none beyond the entry count) — and
+throw on a bad value. It
 SHALL run in the VU context, throw from the init context or after `close`, and
 throw when the broker reports a per-topic error (e.g. the topic already exists).
 
@@ -37,20 +39,23 @@ throw when the broker reports a per-topic error (e.g. the topic already exists).
 
 #### Scenario: Create rejects invalid replica assignments
 
-- **WHEN** `createTopic` is called with a `replicaAssignments` entry whose `partition` is negative or duplicates another entry's
+- **WHEN** `createTopic` is called with `replicaAssignments` whose `partition` IDs are negative, duplicated, or do not cover `0..N-1` contiguously (e.g. a single entry with `partition` 10)
 - **THEN** it throws locally without contacting the broker
 
 ### Requirement: Deleting a topic
 
-`connection.deleteTopic(topic)` SHALL delete the named topic via the connection's
-client. It SHALL reject an empty `topic` locally, run in the VU context, throw
-from the init context or after `close`, and throw when the broker reports a
-per-topic error.
+`connection.deleteTopic(topic)` SHALL request deletion of the named topic via
+the connection's client and return once the broker accepts the request. (Kafka
+processes the deletion asynchronously, so the topic may remain briefly visible
+in metadata afterwards; this method does not poll for the topic to disappear.)
+It SHALL reject an empty `topic` locally, run in the VU context, throw from the
+init context or after `close`, and throw when the broker reports a per-topic
+error.
 
 #### Scenario: Delete a topic
 
 - **WHEN** `deleteTopic("t")` is called on a connected Connection in the VU context for an existing topic
-- **THEN** the topic is removed from the cluster
+- **THEN** the broker accepts the deletion request without error
 
 #### Scenario: Delete fails in init context
 
@@ -65,8 +70,10 @@ per-topic error.
 ### Requirement: Listing topics
 
 `connection.listTopics()` SHALL return the names of all non-internal topics on
-the cluster as a string array. It SHALL run in the VU context and throw from the
-init context or after `close`.
+the cluster as a string array. It SHALL surface a metadata error — a top-level
+or per-topic error code — as a thrown error rather than returning a silently
+truncated list. It SHALL run in the VU context and throw from the init context
+or after `close`.
 
 #### Scenario: List topic names
 

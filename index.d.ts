@@ -801,7 +801,8 @@ export interface TopicConfig {
    * assignment list fully determines the topic's layout — the number of entries
    * is the partition count and each entry's `replicas` is that partition's
    * placement — so both `numPartitions` and `replicationFactor` are ignored.
-   * Each entry's `partition` must be unique and non-negative.
+   * The entries must describe a contiguous layout: one per partition with
+   * `partition` IDs covering exactly `0` to `N-1` (unique, no gaps).
    */
   replicaAssignments?: ReplicaAssignment[];
   /** Extra topic settings, e.g. retention. See {@link ConfigEntry}. */
@@ -847,7 +848,9 @@ export class Connection {
   /**
    * Delete a topic. Call this from the VU context (the default function, or
    * `setup`/`teardown`) — not the init context, and not after `close`. Throws if
-   * `topic` is empty or the broker rejects the request.
+   * `topic` is empty or the broker rejects the request. Kafka removes the topic
+   * asynchronously, so it may stay visible in {@link Connection.listTopics} for a
+   * short while after this returns.
    * @param topic - Name of the topic to delete.
    */
   deleteTopic(topic: string): void;

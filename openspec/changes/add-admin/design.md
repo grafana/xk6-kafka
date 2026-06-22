@@ -36,13 +36,22 @@ pure Go.
   inputs are ignored in this mode — not validated or derived, simply unused —
   rather than reshaped from the assignments as community v1 did. Each assignment
   maps `partition` + `replicas` to a `CreateTopicsRequestTopicReplicaAssignment`.
-  `configEntries` map to topic `Configs` (`configName`/`configValue`).
+  `configEntries` map to topic `Configs` (`configName`/`configValue`). The
+  assignment `partition` IDs must form a contiguous layout `0..N-1` (validated
+  locally: non-negative, unique, none `>= N`) so the entry count is the true
+  partition count; sparse or out-of-range IDs are rejected rather than forwarded.
 - **Delete.** A `DeleteTopicsRequest` for the single named topic. Both the
   legacy `TopicNames` (v0–v5) and the `Topics` (v6+) fields are set so franz-go's
-  negotiated version carries the name on old and new brokers alike.
+  negotiated version carries the name on old and new brokers alike. It returns
+  once the broker accepts the request; Kafka deletes asynchronously, so the
+  method does not poll for the topic to vanish from metadata (matching v1, and
+  avoiding a flaky wait loop).
 - **List.** A `MetadataRequest` with no topics returns cluster metadata for all
   topics; internal topics (e.g. `__consumer_offsets`) are filtered out and the
-  remaining names returned (nil topic names skipped).
+  remaining names returned (nil topic names skipped). A top-level or per-topic
+  error code is converted with `kerr.ErrorForCode` and thrown — the list is never
+  silently truncated to hide a metadata failure (auth, rebootstrap on Kafka
+  4.0+, etc.).
 - **Per-topic errors.** Each response carries a per-topic `ErrorCode`; it is
   converted with `kerr.ErrorForCode` and a non-nil error is thrown (with the
   topic name and any broker message). A transport error from `Request` is thrown
