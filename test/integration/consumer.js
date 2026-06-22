@@ -1,55 +1,62 @@
 // Integration test: produce then consume a round-trip.
 //
-// Skips when KAFKA_BROKER is not configured (local/dev). In CI the broker
-// address is set, so a failure fails the test.
-import { Writer, Reader, START_OFFSETS_FIRST_OFFSET } from "k6/x/kafka";
+// Requires KAFKA_BROKER (run `make broker-up` or `make integration`). The topic
+// is created up front (via Connection) so the round-trip is deterministic on a
+// cold broker. A failure to round-trip the messages fails the test.
+import { Writer, Reader, Connection, START_OFFSETS_FIRST_OFFSET } from "k6/x/kafka";
+import { thresholds, getBroker, verify, runTest, toStr, uniqueTopic } from "./lib/common.js";
 
-const broker = __ENV.KAFKA_BROKER;
-
-// Decode a consumed key/value (bytes) to a string, tolerating array,
-// Uint8Array, or ArrayBuffer representations.
-function toStr(v) {
-  if (v instanceof ArrayBuffer) {
-    v = new Uint8Array(v);
-  }
-  return String.fromCharCode.apply(null, v);
-}
+export const options = { thresholds };
 
 export default function () {
-  if (!broker) {
-    console.log("KAFKA_BROKER not set; skipping consumer integration test");
-    return;
-  }
+  runTest(() => {
+    const broker = getBroker();
+    const topic = uniqueTopic("xk6_kafka_roundtrip");
 
-  const topic = `xk6_kafka_roundtrip_${Date.now()}`;
+    const connection = new Connection({ address: broker });
+    try {
+      connection.createTopic({ topic, numPartitions: 1, replicationFactor: 1 });
+      try {
+        const writer = new Writer({ brokers: [broker], topic });
+        try {
+          writer.produce({
+            messages: [
+              { key: "k1", value: "hello" },
+              { key: "k2", value: "world" },
+            ],
+          });
+        } finally {
+          writer.close();
+        }
 
-  const writer = new Writer({ brokers: [broker], topic, autoCreateTopic: true });
-  writer.produce({
-    messages: [
-      { key: "k1", value: "hello" },
-      { key: "k2", value: "world" },
-    ],
+        const reader = new Reader({
+          brokers: [broker],
+          topic,
+          partition: 0,
+          startOffset: START_OFFSETS_FIRST_OFFSET,
+        });
+        let got = [];
+        try {
+          for (let i = 0; i < 5 && got.length < 2; i++) {
+            got = got.concat(reader.consume({ limit: 2, expectTimeout: true }));
+          }
+        } finally {
+          reader.close();
+        }
+
+        if (!verify("consumed both messages", got.length >= 2)) {
+          return;
+        }
+        const values = got.map((m) => toStr(m.value));
+        verify(
+          "round-trip values match",
+          values.indexOf("hello") !== -1 && values.indexOf("world") !== -1,
+        );
+      } finally {
+        connection.deleteTopic(topic);
+      }
+    } finally {
+      connection.close();
+    }
   });
-  writer.close();
-
-  const reader = new Reader({
-    brokers: [broker],
-    topic,
-    partition: 0,
-    startOffset: START_OFFSETS_FIRST_OFFSET,
-  });
-
-  let got = [];
-  for (let i = 0; i < 5 && got.length < 2; i++) {
-    got = got.concat(reader.consume({ limit: 2, expectTimeout: true }));
-  }
-  reader.close();
-
-  if (got.length < 2) {
-    throw new Error(`expected 2 messages, got ${got.length}`);
-  }
-  const values = got.map((m) => toStr(m.value));
-  if (values.indexOf("hello") === -1 || values.indexOf("world") === -1) {
-    throw new Error("round-trip values mismatch: " + JSON.stringify(values));
-  }
 }

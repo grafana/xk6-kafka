@@ -1,18 +1,17 @@
 // Integration test: connect to a real broker and close.
 //
-// Skips when KAFKA_BROKER is not configured (local/dev). In CI the broker
-// address is set to the Kafka service, so an unreachable broker makes
-// `new Connection` throw and fails the test (it does not skip).
+// Requires KAFKA_BROKER (run `make broker-up` or `make integration`). An
+// unreachable broker makes `new Connection` throw and fails the test.
 import { Connection } from "k6/x/kafka";
+import { thresholds, getBroker, verify, runTest } from "./lib/common.js";
 
-const broker = __ENV.KAFKA_BROKER;
+export const options = { thresholds };
 
 export default function () {
-  if (!broker) {
-    console.log("KAFKA_BROKER not set; skipping connection integration test");
-    return;
-  }
-
-  const connection = new Connection({ address: broker });
-  connection.close();
+  runTest(() => {
+    const broker = getBroker();
+    const connection = new Connection({ address: broker });
+    verify("connected to broker", true);
+    connection.close();
+  });
 }
