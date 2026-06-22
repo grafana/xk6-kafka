@@ -295,14 +295,18 @@ export type BalancerFunction = (key: Uint8Array, partitionCount: number) => numb
  * Writer configuration for producing messages to a topic.
  *
  * @remarks
- * Only `brokers` and `topic` are required. Every other field is optional and
- * falls back to a sensible default, so most scripts set just those two.
+ * Only `brokers` is required. `topic` is the default produce topic (optional if
+ * each message sets its own `topic`). Every other field is optional and falls
+ * back to a sensible default, so most scripts set just `brokers` and `topic`.
  */
 export interface WriterConfig {
   /** Broker addresses to connect to, e.g. `["localhost:9092"]`. Required. */
   brokers: string[];
-  /** Topic to produce to. Used for any message that does not set its own `topic`. Required. */
-  topic: string;
+  /**
+   * Default topic to produce to, used for any message that does not set its own
+   * `topic`. Optional only if every message sets its own `topic`.
+   */
+  topic?: string;
   /**
    * Create the topic automatically if it does not exist yet.
    *
@@ -325,7 +329,10 @@ export interface WriterConfig {
    * implementation matures.
    */
   balancer?: BALANCERS | BalancerFunction;
-  /** How many times to retry sending a message before giving up. */
+  /**
+   * How many times to retry sending a message before giving up. Must be `>= 0`:
+   * `0` disables retries; leave unset to use the client default.
+   */
   maxAttempts?: number;
   /**
    * How many messages to group together before sending them as one batch.
@@ -366,6 +373,8 @@ export interface WriterConfig {
    * - `-1`: wait for all in-sync replicas (safest, slowest).
    * - `0`: don't wait at all (fastest, messages may be lost).
    * - `1`: wait only for the partition leader (in between).
+   *
+   * Only `-1`, `0`, and `1` are valid; other values are rejected.
    * @defaultValue `-1`
    */
   requiredAcks?: number;
@@ -434,7 +443,8 @@ export class Writer {
    */
   constructor(writerConfig: WriterConfig);
   /**
-   * Send one or more messages to Kafka. Call this from the VU (default) function.
+   * Send one or more messages to Kafka. Call this from the VU context (the
+   * default function, or `setup`/`teardown`) — not the init context.
    * @param produceConfig - The messages to send.
    * @example
    * ```javascript

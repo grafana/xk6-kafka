@@ -11,11 +11,14 @@ the producer compatibility scripts.
   shared client builder (brokers, SASL, TLS), with the default `topic`,
   `compression`, `balancer` partitioner, `requiredAcks`, `maxAttempts` (record
   and unknown-topic retries), `writeTimeout` (produce request timeout), batching
-  (`batchBytes`, `batchTimeout`), and `autoCreateTopic`.
+  (`batchBytes`, `batchTimeout`), and `autoCreateTopic`. `brokers` is required
+  (construction errors when empty); `topic` is the default topic (optional when
+  messages set their own).
 - `writer.produce({ messages })` marshals each message — `key`/`value`
   (`string | Uint8Array` → bytes), `headers` (plain object), optional per-message
-  `topic`, optional `time` — and produces them, returning after the batch is
-  acknowledged (or erroring on failure).
+  `topic`, optional `time` — and produces them in the VU context (using the VU's
+  context; rejected from init), returning after the batch is acknowledged (or
+  erroring on failure).
 - `writer.close()` flushes and closes the client.
 - Accept-but-ignore / approximate options are honored as documented in
   `index.d.ts`: `batchSize` (ignored), `BALANCER_CRC32` and a custom balancer
@@ -46,5 +49,6 @@ the producer behavior as a new capability. -->
   with the consumer change.
 - `index.d.ts`: doc remarks are clarified to match the franz-go behavior —
   `writeTimeout` (produce request timeout), `readTimeout` and `connectLogger`
-  (accepted-but-ignored). No type changes. Otherwise this implements part of the
-  contract it already declares.
+  (accepted-but-ignored). `WriterConfig.topic` becomes optional (it is the
+  default topic; per-message `topic` overrides it). Otherwise this implements
+  part of the contract it already declares.

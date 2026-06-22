@@ -7,14 +7,32 @@ shared client builder (brokers, SASL, TLS) and apply the producer options from
 `WriterConfig`: default `topic`, `compression`, `balancer` partitioner,
 `requiredAcks`, `maxAttempts` (record and unknown-topic retries), `writeTimeout`
 (produce request timeout), batching (`batchBytes`, `batchTimeout`), and
-`autoCreateTopic`.
-Construction SHALL fail with an error when the configuration is invalid (e.g. no
-brokers).
+`autoCreateTopic`. `brokers` is required; `topic` is the default produce topic
+(optional when every message sets its own `topic`). `requiredAcks`, when set,
+MUST be `-1`, `0`, or `1`. `maxAttempts`, when set, MUST be `>= 0` and is applied
+exactly (including `0` to disable retries) rather than left at the franz-go
+default. Construction SHALL fail with an error when `brokers` is empty,
+`requiredAcks` is out of range, or `maxAttempts` is negative.
 
 #### Scenario: Construct with brokers and topic
 
 - **WHEN** a Writer is constructed with a broker list and a topic
 - **THEN** a Writer instance is returned without error
+
+#### Scenario: Construction fails without brokers
+
+- **WHEN** a Writer is constructed with no `brokers`
+- **THEN** construction throws an error
+
+#### Scenario: Construction fails on invalid requiredAcks
+
+- **WHEN** a Writer is constructed with `requiredAcks` set to a value other than `-1`, `0`, or `1`
+- **THEN** construction throws an error
+
+#### Scenario: Construction fails on negative maxAttempts
+
+- **WHEN** a Writer is constructed with a negative `maxAttempts`
+- **THEN** construction throws an error
 
 #### Scenario: requiredAcks maps to the client
 
@@ -55,7 +73,9 @@ timestamp.
 
 `writer.produce(produceConfig)` SHALL produce every message in
 `produceConfig.messages`, returning after the broker acknowledges the batch and
-throwing on a produce error.
+throwing on a produce error. It SHALL run in the VU context (default / setup /
+teardown), using the VU's context so it aborts when the VU stops, and SHALL
+throw if called from the init context.
 
 #### Scenario: Produce succeeds against a broker
 
@@ -64,11 +84,19 @@ throwing on a produce error.
 
 #### Scenario: Produce error surfaces
 
-- **WHEN** producing to a non-existent topic with `autoCreateTopic` false
-- **THEN** `produce` throws an error
+- **WHEN** a produce request is rejected by the broker (the franz-go produce result carries an error)
+- **THEN** `produce` throws
+
+#### Scenario: Produce in init context is rejected
+
+- **WHEN** `produce` is called from the init context (no VU state)
+- **THEN** it throws rather than producing
 
 <!-- Reading produced records back (verifying headers/topic/value end to end on
-the consume side) is covered by the consumer change. -->
+the consume side) is covered by the consumer change. A deterministic broker-side
+error case — e.g. producing to a missing topic with auto-create disabled —
+requires controlling topic state and is added with the admin change (the broker
+default auto-creates topics, so it is not deterministic here). -->
 
 ### Requirement: Accepted-but-ignored producer options
 

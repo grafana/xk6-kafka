@@ -51,6 +51,14 @@ conform to `index.d.ts` and stay pure Go.
   (documented accepted-ignored). Rationale: use the closest maintained
   franz-go partitioners; avoid inventing a CRC32 one in this change.
 - **`requiredAcks` mapping.** `-1` → all ISR, `0` → none, `1` → leader.
+- **Produce runs in the VU context.** The `Writer` holds the `modules.VU`;
+  `produce` uses `vu.Context()` so it aborts when the VU stops, and rejects
+  init-context calls (`vu.State() == nil`), matching v1's "call from the VU
+  function" contract. Rationale: correct cancellation and lifecycle.
+- **Construction validation.** `brokers` is required — `openWriter` errors on an
+  empty list rather than failing later on first produce. `topic` is the default
+  produce topic (per-message `topic` overrides it), so `index.d.ts` marks it
+  optional rather than falsely-required.
 - **Message marshaling.** `key`/`value`: a JS string → its UTF-8 bytes, a
   `Uint8Array` → its bytes. `headers`: a plain object → `kgo.RecordHeader`s.
   `topic`: per-message override of the default. `time`: a `Date` → the record
