@@ -36,8 +36,8 @@ test: ## Run the unit tests (go test)
 	go test ./...
 
 .PHONY: it
-it: ## Run the integration tests (xk6 test)
-	xk6 test
+it: ## Run the integration tests (xk6 test; set KAFKA_BROKER to hit a real broker)
+	xk6 test "test/integration/*.js"
 
 $(LINT_BASE): $(WORKFLOW)
 	curl -fsSL $(BASE_URL) -o $@

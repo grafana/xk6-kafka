@@ -8,6 +8,8 @@
 package kafka
 
 import (
+	"fmt"
+
 	"github.com/grafana/sobek"
 	"go.k6.io/k6/v2/js/common"
 	"go.k6.io/k6/v2/js/modules"
@@ -62,13 +64,12 @@ func (m *Module) defineSymbols() {
 		}
 	}
 
-	// Scaffold constructors: invocable with `new` and construct without error.
-	// Full class/prototype semantics (e.g. `instanceof`) are established when
-	// instance methods are added by later changes; the scaffold only guarantees
-	// the symbols exist and construct.
+	// Writer/Reader/SchemaRegistry remain scaffold constructors (construct
+	// without error; method behavior lands in later changes). Connection and
+	// LoadJKS are implemented by this change.
 	set("Writer", scaffoldConstructor())
 	set("Reader", scaffoldConstructor())
-	set("Connection", scaffoldConstructor())
+	set("Connection", m.newConnection)
 	set("SchemaRegistry", scaffoldConstructor())
 	set("LoadJKS", m.loadJKS)
 }
@@ -80,8 +81,22 @@ func scaffoldConstructor() func(sobek.ConstructorCall) *sobek.Object {
 	return func(_ sobek.ConstructorCall) *sobek.Object { return nil }
 }
 
-// loadJKS is the LoadJKS function symbol. Keystore-loading behavior is deferred
-// to the auth change; for now it is present and callable.
-func (m *Module) loadJKS(_ sobek.FunctionCall) sobek.Value {
-	return sobek.Undefined()
+// newConnection constructs a Connection: it decodes the config, builds an
+// authenticated client, and verifies connectivity (failing on an unreachable
+// cluster). The returned object exposes the instance methods (e.g. close).
+func (m *Module) newConnection(call sobek.ConstructorCall) *sobek.Object {
+	rt := m.vu.Runtime()
+
+	var cfg ConnectionConfig
+	if len(call.Arguments) > 0 {
+		if err := rt.ExportTo(call.Argument(0), &cfg); err != nil {
+			common.Throw(rt, fmt.Errorf("invalid connection config: %w", err))
+		}
+	}
+
+	conn, err := openConnection(cfg)
+	if err != nil {
+		common.Throw(rt, err)
+	}
+	return rt.ToValue(conn).ToObject(rt)
 }
