@@ -60,7 +60,10 @@ export const SASL_PLAIN: "sasl_plain";
 export const SASL_SCRAM_SHA256: "sasl_scram_sha256";
 /** SASL/SCRAM using SHA-512. */
 export const SASL_SCRAM_SHA512: "sasl_scram_sha512";
-/** SASL over SSL. */
+/**
+ * SASL over a TLS connection. Uses the PLAIN mechanism with the configured
+ * `username`/`password`, and requires TLS to be enabled.
+ */
 export const SASL_SSL: "sasl_ssl";
 /** SASL with AWS IAM credentials (AWS MSK). */
 export const SASL_AWS_IAM: "sasl_aws_iam";
@@ -156,7 +159,8 @@ export interface JKS {
  * into a {@link TLSConfig} for mutual TLS.
  * @param jksConfig - JKS configuration.
  * @returns JKS client and server certificates and private key.
- * @remarks Only the JKS format is supported; PKCS#12 keystores are not.
+ * @remarks Call this in the init context (it reads the keystore through k6's
+ * file system). Only the JKS format is supported; PKCS#12 keystores are not.
  * @example
  * ```javascript
  * const jks = LoadJKS({
