@@ -1,7 +1,8 @@
 # Broker-backed integration tests. The shared grafana/k6-ci workflow has no
-# Kafka, so this job starts a single-node Kafka (KRaft) and runs `make it`
-# against it. With KAFKA_BROKER set, an unreachable broker fails the job (the
-# tests skip only when no broker is configured, e.g. local runs).
+# Kafka, so this job starts a single-node Kafka (KRaft) via the repo's
+# compose.yaml — the same broker `make integration` uses locally — and runs
+# `make it` against it. The tests require KAFKA_BROKER, so an unreachable broker
+# fails the job (no silent skip).
 name: integration
 on:
   pull_request:
@@ -35,29 +36,17 @@ jobs:
           xk6-version: 1.4.5
 
       - name: Start Kafka (single-node KRaft)
-        run: |
-          docker run -d --name kafka -p 9092:9092 \
-            -e KAFKA_NODE_ID=1 \
-            -e KAFKA_PROCESS_ROLES=broker,controller \
-            -e KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093 \
-            -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092 \
-            -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
-            -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093 \
-            -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
-            -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
-            apache/kafka:3.9.1
-
-      - name: Wait for Kafka
-        run: |
-          for _ in $(seq 1 30); do
-            if (exec 3<>/dev/tcp/localhost/9092) 2>/dev/null; then
-              echo "Kafka is up"; exit 0
-            fi
-            sleep 2
-          done
-          echo "Kafka did not become ready"; docker logs kafka || true; exit 1
+        run: make broker-up
 
       - name: Integration tests
         env:
           KAFKA_BROKER: localhost:9092
         run: make it
+
+      - name: Kafka logs on failure
+        if: failure()
+        run: docker compose logs kafka || true
+
+      - name: Stop Kafka
+        if: always()
+        run: make broker-down
