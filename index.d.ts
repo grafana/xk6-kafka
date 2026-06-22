@@ -353,8 +353,9 @@ export interface WriterConfig {
    */
   batchTimeout?: number;
   /**
-   * How long to wait when reading from the socket, in nanoseconds (see {@link TIME}).
-   * @remarks Mapped approximately on the pure-Go (franz-go) path; exact behavior may differ.
+   * Originally the socket read timeout, in nanoseconds (see {@link TIME}).
+   * @remarks Accepted for compatibility but ignored on the pure-Go (franz-go)
+   * path, which manages socket read deadlines internally with no equivalent knob.
    */
   readTimeout?: number;
   /**
@@ -368,7 +369,12 @@ export interface WriterConfig {
    * @defaultValue `-1`
    */
   requiredAcks?: number;
-  /** How long to wait when writing to the socket, in nanoseconds (see {@link TIME}). */
+  /**
+   * Maximum time to wait for a produce request to be acknowledged by the broker,
+   * in nanoseconds (see {@link TIME}).
+   * @remarks On the pure-Go (franz-go) path this is the produce request timeout;
+   * it approximates the v1 socket write timeout.
+   */
   writeTimeout?: number;
   /**
    * Compression to apply to produced messages. Also a way to fit more data
@@ -384,6 +390,7 @@ export interface WriterConfig {
    * Log low-level connection activity to the k6 output. Useful for debugging
    * connection problems; noisy in normal runs.
    * @defaultValue `false`
+   * @remarks Accepted but not yet wired on the pure-Go path; currently has no effect.
    */
   connectLogger?: boolean;
 }
