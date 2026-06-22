@@ -517,8 +517,12 @@ export type GROUP_BALANCERS =
  * Configuration for creating a {@link Reader} instance.
  *
  * @remarks
- * Only `brokers` plus either `topic` or `groupTopics` are required; the many
- * tuning fields below are optional and default to sensible values.
+ * Required: `brokers`, plus a consumption target — either a `groupID` together
+ * with `groupTopics` (or `topic`) for consumer-group consumption, or a `topic`
+ * for direct single-partition consumption (`partition` defaults to `0`; use a
+ * consumer group to read multiple partitions). `groupTopics` alone, without a
+ * `groupID`, is not valid. The many tuning fields below are optional and default
+ * to sensible values.
  */
 export interface ReaderConfig {
   /** Broker addresses to connect to, e.g. `["localhost:9092"]`. Required. */
@@ -529,12 +533,15 @@ export interface ReaderConfig {
    * (committed offsets). Leave empty to read on your own without a group.
    */
   groupID?: string;
-  /** Topics the consumer group reads from. Use this instead of `topic` when using a group. */
+  /** Topics the consumer group reads from. When using a group, set this or `topic`. */
   groupTopics?: string[];
-  /** Single topic to read from when not using a consumer group. */
+  /**
+   * Single topic to read from. Used without a consumer group, and also as the
+   * group's topic when `groupID` is set but `groupTopics` is not.
+   */
   topic?: string;
   /**
-   * Specific partition to read from.
+   * Specific partition to read from in direct mode; defaults to `0` when omitted.
    * @remarks Ignored when `groupID` is set, because the group assigns partitions for you.
    */
   partition?: number;
@@ -563,12 +570,14 @@ export interface ReaderConfig {
    */
   readBatchTimeout?: number;
   /**
-   * Longest time to wait for new messages before a fetch returns, as a duration
-   * string (e.g. `"200ms"`, `"2s"`).
+   * Longest time to wait for new messages, as a duration string (e.g. `"200ms"`,
+   * `"5s"`). It bounds both the broker fetch wait and how long a single
+   * `consume` call blocks.
    *
    * @remarks
-   * Defaults to about 1 second. On low-throughput topics, raise it (e.g. `"5s"`)
-   * so `consume` waits long enough for messages instead of appearing to hang.
+   * Defaults to about 5 seconds (the franz-go fetch-wait default). On
+   * low-throughput topics, raise it so `consume` waits long enough for messages
+   * instead of timing out.
    */
   maxWait?: string;
   /**
@@ -625,22 +634,27 @@ export interface ReaderConfig {
    */
   retentionTime?: number;
   /**
-   * Where a consumer group starts reading when it has no saved offset yet:
-   * the earliest or the latest message.
+   * Where to start reading when there is no position to resume from: the
+   * earliest or the latest message. Applies to a consumer group with no
+   * committed offset, and to a direct-partition reader that does not set an
+   * explicit `offset`.
    * @defaultValue {@link START_OFFSETS_FIRST_OFFSET}
    */
   startOffset?: START_OFFSETS;
   /**
    * Minimum backoff between read retries, in nanoseconds (see {@link TIME}).
-   * @remarks Mapped approximately on the pure-Go (franz-go) path, which uses a single client-wide retry backoff.
+   * @remarks Accepted but ignored on the pure-Go (franz-go) path, which has no read-specific backoff knob.
    */
   readBackoffMin?: number;
   /**
    * Maximum backoff between read retries, in nanoseconds (see {@link TIME}).
-   * @remarks Mapped approximately on the pure-Go (franz-go) path, which uses a single client-wide retry backoff.
+   * @remarks Accepted but ignored on the pure-Go (franz-go) path, which has no read-specific backoff knob.
    */
   readBackoffMax?: number;
-  /** Enable the underlying client's connection logger. */
+  /**
+   * Enable the underlying client's connection logger.
+   * @remarks Accepted but not yet wired on the pure-Go (franz-go) path; currently has no effect.
+   */
   connectLogger?: boolean;
   /** How many times to retry a read before returning an error. */
   maxAttempts?: number;
@@ -651,8 +665,8 @@ export interface ReaderConfig {
   isolationLevel?: ISOLATION_LEVEL;
   /**
    * Exact offset to start reading from when reading a single partition without
-   * a group. This is the numeric counterpart to {@link startOffset}, which is
-   * the string-based setting used by consumer-group readers.
+   * a group. Takes precedence over {@link startOffset} (the symbolic
+   * earliest/latest setting) for a direct-partition reader.
    * @remarks Use `0` to start from the beginning, `-1` for the latest message, or any positive number for a specific offset.
    */
   offset?: number;
@@ -666,7 +680,8 @@ export interface ReaderConfig {
 export interface ConsumeConfig {
   /**
    * Maximum number of messages to return from this call. `consume` returns once
-   * it has this many messages, or sooner if the reader's `maxWait` passes.
+   * it has this many messages; if the reader's `maxWait` passes first, see
+   * `expectTimeout`.
    */
   limit: number;
   /**
@@ -677,7 +692,8 @@ export interface ConsumeConfig {
   nanoPrecision?: boolean;
   /**
    * If `true`, return whatever messages were collected so far when `maxWait`
-   * passes, instead of waiting for the full `limit`.
+   * passes, instead of waiting for the full `limit`. If `false` (the default),
+   * a `maxWait` timeout before `limit` messages arrive throws instead.
    * @defaultValue `false`
    */
   expectTimeout?: boolean;
@@ -708,8 +724,10 @@ export class Reader {
    */
   constructor(readerConfig: ReaderConfig);
   /**
-   * Read up to `limit` messages from Kafka. Call this from the VU (default)
-   * function. Returns an empty array if no messages arrive before the timeout.
+   * Read up to `limit` messages from Kafka. Call this from the VU context (the
+   * default function, or `setup`/`teardown`) — not the init context. By default
+   * it throws if `maxWait` passes before `limit` messages arrive; set
+   * `expectTimeout` to return the partial (or empty) batch instead.
    * @param consumeConfig - How many messages to read and how to wait.
    * @returns The messages read.
    * @example
