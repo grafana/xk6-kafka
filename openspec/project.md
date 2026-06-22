@@ -65,6 +65,12 @@ and GitHub issue #1 for the implementation epic.
   required compatibility workflows (see issue #1): basic produce/consume
   (string, bytes, JSON), topic admin, consumer group, SASL (PLAIN, SCRAM), TLS
   incl. JKS, and Schema Registry serdes (Avro, JSON).
+- **Compatibility fixtures** live under `test/integration/compat/` and are
+  modernized ports of the community v1 scripts (broker address and Schema
+  Registry URL from env, e.g. `KAFKA_BROKER`), keeping the original
+  `check()` assertions so behavior parity is what's verified. They are added
+  incrementally: each capability change ports the community script(s) it makes
+  runnable.
 - CI must run `golangci-lint`, `xk6 lint`, unit tests, `xk6 test`, and an
   `xk6 build` smoke test.
 

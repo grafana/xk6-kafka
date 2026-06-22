@@ -4,8 +4,9 @@
 
 The client builder SHALL select the `twmb/franz-go` SASL mechanism that matches
 `SASLConfig.algorithm`: `sasl_plain` → PLAIN, `sasl_scram_sha256` → SCRAM-SHA-256,
-`sasl_scram_sha512` → SCRAM-SHA-512, `sasl_aws_iam` → AWS IAM (using
-`awsProfile`). `sasl_ssl` SHALL use the PLAIN mechanism with the configured
+`sasl_scram_sha512` → SCRAM-SHA-512. `sasl_aws_iam` is deferred to a dedicated
+change and SHALL return a "not yet implemented" error for now. `sasl_ssl` SHALL
+use the PLAIN mechanism with the configured
 credentials and SHALL require TLS to be enabled — building a client with
 `sasl_ssl` while TLS is not enabled SHALL fail with an error (matching v1
 behavior). When the algorithm is `none` or the SASL config is absent, no SASL
@@ -26,6 +27,11 @@ used as the mechanism credentials where applicable.
 
 - **WHEN** a client is built with no SASL config (or `algorithm` `none`)
 - **THEN** the client is configured without any SASL mechanism
+
+#### Scenario: AWS IAM is deferred
+
+- **WHEN** a client is built with `algorithm` `sasl_aws_iam`
+- **THEN** it returns a "not yet implemented" error (AWS IAM lands in a dedicated change)
 
 ### Requirement: TLS configuration
 

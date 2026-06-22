@@ -21,9 +21,11 @@ pure Go.
 
 ## Decisions
 
-- **franz-go SASL packages.** Use `pkg/sasl/plain`, `pkg/sasl/scram`
-  (Sha256/Sha512), and `pkg/sasl/aws` for AWS IAM. Selection is a switch on
-  `algorithm`. Rationale: these are the maintained franz-go mechanisms.
+- **franz-go SASL packages.** Use `pkg/sasl/plain` and `pkg/sasl/scram`
+  (Sha256/Sha512), selected by a switch on `algorithm`. `sasl_aws_iam` is
+  deferred (it needs an AWS credential provider and pulls in the AWS SDK); it
+  returns a "not yet implemented" error here and lands in its own change.
+  Rationale: keep this change's dependency footprint small.
 - **`sasl_ssl` mapping.** Treat `sasl_ssl` as SASL/PLAIN credentials carried over
   a TLS connection (TLS is enabled separately via `TLSConfig`), matching v1
   intent where "SSL" meant transport security rather than a distinct mechanism.
@@ -70,5 +72,5 @@ pure Go.
 
 - Exact franz-go connectivity check for `Connection` (Ping vs a metadata
   request) — settle in implementation; not contract-visible.
-- AWS IAM credential source beyond `awsProfile` (env, role) — start with
-  `awsProfile`; extend if needed.
+- AWS IAM credential source (profile / env / role) — settled in the dedicated
+  `SASL_AWS_IAM` change, not here.

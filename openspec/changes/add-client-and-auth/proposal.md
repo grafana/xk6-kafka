@@ -12,9 +12,10 @@ de-risks every capability that follows.
   filesystem, archive-aware) and return PEM material (`clientCertsPem`,
   `clientKeyPem`, `serverCaPem`). Pure Go; PKCS#12 is rejected.
 - Map `SASLConfig.algorithm` to a `twmb/franz-go` SASL mechanism: `none`,
-  `sasl_plain`, `sasl_scram_sha256`, `sasl_scram_sha512`, `sasl_aws_iam`
-  (honoring `awsProfile`). `sasl_ssl` uses PLAIN and requires TLS to be enabled
-  (matching v1).
+  `sasl_plain`, `sasl_scram_sha256`, `sasl_scram_sha512`. `sasl_ssl` uses PLAIN
+  and requires TLS to be enabled (matching v1). `sasl_aws_iam` is deferred to a
+  dedicated change (it needs an AWS credential provider and the AWS SDK) and
+  returns a "not yet implemented" error for now.
 - Run the broker-backed integration tests in CI against a Kafka service, in
   addition to the shared `grafana/k6-ci` workflow.
 - Map `TLSConfig` to a `*tls.Config`: `enableTls`, `insecureSkipTlsVerify`,

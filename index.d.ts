@@ -65,7 +65,11 @@ export const SASL_SCRAM_SHA512: "sasl_scram_sha512";
  * `username`/`password`, and requires TLS to be enabled.
  */
 export const SASL_SSL: "sasl_ssl";
-/** SASL with AWS IAM credentials (AWS MSK). */
+/**
+ * SASL with AWS IAM credentials (AWS MSK).
+ * @remarks Not yet implemented: selecting this mechanism currently errors. It is
+ * deferred to a dedicated change (it needs an AWS credential provider).
+ */
 export const SASL_AWS_IAM: "sasl_aws_iam";
 /**
  * SASL mechanisms for authenticating to Kafka.
@@ -128,20 +132,31 @@ export interface TLSConfig {
   serverCaPem?: string;
 }
 
-/** Configuration for loading a Java KeyStore (JKS) from a file. */
+/**
+ * Configuration for loading a Java KeyStore (JKS) from a file.
+ *
+ * @remarks
+ * Set `clientKeyAlias` to extract a client key + certificate chain (keystore),
+ * and/or `serverCaAlias` to extract a server CA (truststore); either may be
+ * omitted, so a keystore-only or truststore-only JKS works.
+ */
 export interface JKSConfig {
   /** Path to the JKS keystore file. */
   path: string;
   /** Password protecting the keystore. */
   password: string;
-  /** Alias of the client certificate within the keystore. */
-  clientCertAlias: string;
-  /** Alias of the client private key within the keystore. */
-  clientKeyAlias: string;
+  /**
+   * Alias of the client certificate within the keystore.
+   * @remarks Accepted for compatibility but currently not used: the client
+   * certificate chain is taken from the private-key entry (`clientKeyAlias`).
+   */
+  clientCertAlias?: string;
+  /** Alias of the client private key (and its certificate chain). Omit for a truststore-only keystore. */
+  clientKeyAlias?: string;
   /** Password protecting the client private key. */
-  clientKeyPassword: string;
-  /** Alias of the server CA certificate within the keystore. */
-  serverCaAlias: string;
+  clientKeyPassword?: string;
+  /** Alias of the server CA certificate. Omit for a keystore-only keystore. */
+  serverCaAlias?: string;
 }
 
 /** Certificates and key extracted from a JKS keystore, in PEM format. */

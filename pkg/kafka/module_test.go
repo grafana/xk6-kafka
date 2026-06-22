@@ -22,12 +22,11 @@ func TestModuleExportsAndConstruction(t *testing.T) {
 
 	rt := newTestModule(t)
 	_, err := rt.VU.Runtime().RunString(`
-		// Constructors are present and construct without error. (Full class /
-		// prototype semantics are added with the instance methods in later
-		// changes; the scaffold only guarantees construction.)
+		// Scaffold constructors still present and construct without error.
+		// (Connection now connects eagerly and needs a broker, so it is covered
+		// by the gated integration tests, not here.)
 		new kafka.Writer({ brokers: ["localhost:9092"], topic: "t" });
 		new kafka.Reader({ brokers: ["localhost:9092"], topic: "t" });
-		new kafka.Connection({ address: "localhost:9092" });
 		new kafka.SchemaRegistry();
 
 		// LoadJKS is present as a function.
