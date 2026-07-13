@@ -41,6 +41,7 @@ jobs:
       - name: Integration tests
         env:
           KAFKA_BROKER: localhost:9092
+          SCHEMA_REGISTRY_URL: http://localhost:8081
         run: make it
 
       - name: Kafka logs on failure
