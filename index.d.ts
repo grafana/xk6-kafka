@@ -295,14 +295,18 @@ export type BalancerFunction = (key: Uint8Array, partitionCount: number) => numb
  * Writer configuration for producing messages to a topic.
  *
  * @remarks
- * Only `brokers` and `topic` are required. Every other field is optional and
- * falls back to a sensible default, so most scripts set just those two.
+ * Only `brokers` is required. `topic` is the default produce topic (optional if
+ * each message sets its own `topic`). Every other field is optional and falls
+ * back to a sensible default, so most scripts set just `brokers` and `topic`.
  */
 export interface WriterConfig {
   /** Broker addresses to connect to, e.g. `["localhost:9092"]`. Required. */
   brokers: string[];
-  /** Topic to produce to. Used for any message that does not set its own `topic`. Required. */
-  topic: string;
+  /**
+   * Default topic to produce to, used for any message that does not set its own
+   * `topic`. Optional only if every message sets its own `topic`.
+   */
+  topic?: string;
   /**
    * Create the topic automatically if it does not exist yet.
    *
@@ -325,7 +329,10 @@ export interface WriterConfig {
    * implementation matures.
    */
   balancer?: BALANCERS | BalancerFunction;
-  /** How many times to retry sending a message before giving up. */
+  /**
+   * How many times to retry sending a message before giving up. Must be `>= 0`:
+   * `0` disables retries; leave unset to use the client default.
+   */
   maxAttempts?: number;
   /**
    * How many messages to group together before sending them as one batch.
@@ -353,8 +360,9 @@ export interface WriterConfig {
    */
   batchTimeout?: number;
   /**
-   * How long to wait when reading from the socket, in nanoseconds (see {@link TIME}).
-   * @remarks Mapped approximately on the pure-Go (franz-go) path; exact behavior may differ.
+   * Originally the socket read timeout, in nanoseconds (see {@link TIME}).
+   * @remarks Accepted for compatibility but ignored on the pure-Go (franz-go)
+   * path, which manages socket read deadlines internally with no equivalent knob.
    */
   readTimeout?: number;
   /**
@@ -365,10 +373,17 @@ export interface WriterConfig {
    * - `-1`: wait for all in-sync replicas (safest, slowest).
    * - `0`: don't wait at all (fastest, messages may be lost).
    * - `1`: wait only for the partition leader (in between).
+   *
+   * Only `-1`, `0`, and `1` are valid; other values are rejected.
    * @defaultValue `-1`
    */
   requiredAcks?: number;
-  /** How long to wait when writing to the socket, in nanoseconds (see {@link TIME}). */
+  /**
+   * Maximum time to wait for a produce request to be acknowledged by the broker,
+   * in nanoseconds (see {@link TIME}).
+   * @remarks On the pure-Go (franz-go) path this is the produce request timeout;
+   * it approximates the v1 socket write timeout.
+   */
   writeTimeout?: number;
   /**
    * Compression to apply to produced messages. Also a way to fit more data
@@ -384,6 +399,7 @@ export interface WriterConfig {
    * Log low-level connection activity to the k6 output. Useful for debugging
    * connection problems; noisy in normal runs.
    * @defaultValue `false`
+   * @remarks Accepted but not yet wired on the pure-Go path; currently has no effect.
    */
   connectLogger?: boolean;
 }
@@ -427,7 +443,8 @@ export class Writer {
    */
   constructor(writerConfig: WriterConfig);
   /**
-   * Send one or more messages to Kafka. Call this from the VU (default) function.
+   * Send one or more messages to Kafka. Call this from the VU context (the
+   * default function, or `setup`/`teardown`) — not the init context.
    * @param produceConfig - The messages to send.
    * @example
    * ```javascript
@@ -485,9 +502,9 @@ export const GROUP_BALANCER_ROUND_ROBIN: "group_balancer_round_robin";
 /**
  * Prefer assigning partitions to members in the same rack to reduce cross-rack traffic.
  * @remarks
- * Accepted for v1 compatibility but currently has no equivalent on the pure-Go
- * (franz-go) path, so it may not be honored yet. This may change as the
- * implementation matures.
+ * Accepted for v1 compatibility but has no equivalent on the pure-Go (franz-go)
+ * path, so it is ignored; a group with no other balancer uses the `range`
+ * default. This may change as the implementation matures.
  */
 export const GROUP_BALANCER_RACK_AFFINITY: "group_balancer_rack_affinity";
 /** Consumer group balancing strategies for consuming messages. */
@@ -500,8 +517,12 @@ export type GROUP_BALANCERS =
  * Configuration for creating a {@link Reader} instance.
  *
  * @remarks
- * Only `brokers` plus either `topic` or `groupTopics` are required; the many
- * tuning fields below are optional and default to sensible values.
+ * Required: `brokers`, plus a consumption target — either a `groupID` together
+ * with `groupTopics` (or `topic`) for consumer-group consumption, or a `topic`
+ * for direct single-partition consumption (`partition` defaults to `0`; use a
+ * consumer group to read multiple partitions). `groupTopics` alone, without a
+ * `groupID`, is not valid. The many tuning fields below are optional and default
+ * to sensible values.
  */
 export interface ReaderConfig {
   /** Broker addresses to connect to, e.g. `["localhost:9092"]`. Required. */
@@ -512,12 +533,15 @@ export interface ReaderConfig {
    * (committed offsets). Leave empty to read on your own without a group.
    */
   groupID?: string;
-  /** Topics the consumer group reads from. Use this instead of `topic` when using a group. */
+  /** Topics the consumer group reads from. When using a group, set this or `topic`. */
   groupTopics?: string[];
-  /** Single topic to read from when not using a consumer group. */
+  /**
+   * Single topic to read from. Used without a consumer group, and also as the
+   * group's topic when `groupID` is set but `groupTopics` is not.
+   */
   topic?: string;
   /**
-   * Specific partition to read from.
+   * Specific partition to read from in direct mode; defaults to `0` when omitted.
    * @remarks Ignored when `groupID` is set, because the group assigns partitions for you.
    */
   partition?: number;
@@ -546,12 +570,14 @@ export interface ReaderConfig {
    */
   readBatchTimeout?: number;
   /**
-   * Longest time to wait for new messages before a fetch returns, as a duration
-   * string (e.g. `"200ms"`, `"2s"`).
+   * Longest time to wait for new messages, as a duration string (e.g. `"200ms"`,
+   * `"5s"`). It bounds both the broker fetch wait and how long a single
+   * `consume` call blocks.
    *
    * @remarks
-   * Defaults to about 1 second. On low-throughput topics, raise it (e.g. `"5s"`)
-   * so `consume` waits long enough for messages instead of appearing to hang.
+   * Defaults to about 5 seconds (the franz-go fetch-wait default). On
+   * low-throughput topics, raise it so `consume` waits long enough for messages
+   * instead of timing out.
    */
   maxWait?: string;
   /**
@@ -562,7 +588,10 @@ export interface ReaderConfig {
    * implementation matures.
    */
   readLagInterval?: number;
-  /** Consumer group rebalancing strategies, in priority order. */
+  /**
+   * Consumer group rebalancing strategies, in priority order.
+   * @defaultValue {@link GROUP_BALANCER_RANGE}
+   */
   groupBalancers?: GROUP_BALANCERS[];
   /** Interval between consumer group heartbeats, in nanoseconds (see {@link TIME}). */
   heartbeatInterval?: number;
@@ -608,24 +637,32 @@ export interface ReaderConfig {
    */
   retentionTime?: number;
   /**
-   * Where a consumer group starts reading when it has no saved offset yet:
-   * the earliest or the latest message.
+   * Where to start reading when there is no position to resume from: the
+   * earliest or the latest message. Applies to a consumer group with no
+   * committed offset, and to a direct-partition reader that does not set an
+   * explicit `offset`.
    * @defaultValue {@link START_OFFSETS_FIRST_OFFSET}
    */
   startOffset?: START_OFFSETS;
   /**
    * Minimum backoff between read retries, in nanoseconds (see {@link TIME}).
-   * @remarks Mapped approximately on the pure-Go (franz-go) path, which uses a single client-wide retry backoff.
+   * @remarks Accepted but ignored on the pure-Go (franz-go) path, which has no read-specific backoff knob.
    */
   readBackoffMin?: number;
   /**
    * Maximum backoff between read retries, in nanoseconds (see {@link TIME}).
-   * @remarks Mapped approximately on the pure-Go (franz-go) path, which uses a single client-wide retry backoff.
+   * @remarks Accepted but ignored on the pure-Go (franz-go) path, which has no read-specific backoff knob.
    */
   readBackoffMax?: number;
-  /** Enable the underlying client's connection logger. */
+  /**
+   * Enable the underlying client's connection logger.
+   * @remarks Accepted but not yet wired on the pure-Go (franz-go) path; currently has no effect.
+   */
   connectLogger?: boolean;
-  /** How many times to retry a read before returning an error. */
+  /**
+   * How many times to retry a read before returning an error. Must be `>= 0`:
+   * `0` disables retries; leave unset to use the client default.
+   */
   maxAttempts?: number;
   /**
    * Whether to include messages from transactions that are not yet committed.
@@ -634,9 +671,9 @@ export interface ReaderConfig {
   isolationLevel?: ISOLATION_LEVEL;
   /**
    * Exact offset to start reading from when reading a single partition without
-   * a group. This is the numeric counterpart to {@link startOffset}, which is
-   * the string-based setting used by consumer-group readers.
-   * @remarks Use `0` to start from the beginning, `-1` for the latest message, or any positive number for a specific offset.
+   * a group. Takes precedence over {@link startOffset} (the symbolic
+   * earliest/latest setting) for a direct-partition reader.
+   * @remarks Use `0` to start from the beginning, `-1` for the latest message, or any positive number for a specific offset. Values below `-1` are rejected.
    */
   offset?: number;
   /** SASL authentication settings. Leave unset to connect without authentication. */
@@ -649,7 +686,8 @@ export interface ReaderConfig {
 export interface ConsumeConfig {
   /**
    * Maximum number of messages to return from this call. `consume` returns once
-   * it has this many messages, or sooner if the reader's `maxWait` passes.
+   * it has this many messages; if the reader's `maxWait` passes first, see
+   * `expectTimeout`.
    */
   limit: number;
   /**
@@ -660,7 +698,8 @@ export interface ConsumeConfig {
   nanoPrecision?: boolean;
   /**
    * If `true`, return whatever messages were collected so far when `maxWait`
-   * passes, instead of waiting for the full `limit`.
+   * passes, instead of waiting for the full `limit`. If `false` (the default),
+   * a `maxWait` timeout before `limit` messages arrive throws instead.
    * @defaultValue `false`
    */
   expectTimeout?: boolean;
@@ -691,8 +730,10 @@ export class Reader {
    */
   constructor(readerConfig: ReaderConfig);
   /**
-   * Read up to `limit` messages from Kafka. Call this from the VU (default)
-   * function. Returns an empty array if no messages arrive before the timeout.
+   * Read up to `limit` messages from Kafka. Call this from the VU context (the
+   * default function, or `setup`/`teardown`) — not the init context. By default
+   * it throws if `maxWait` passes before `limit` messages arrive; set
+   * `expectTimeout` to return the partial (or empty) batch instead.
    * @param consumeConfig - How many messages to read and how to wait.
    * @returns The messages read.
    * @example
@@ -742,11 +783,27 @@ export interface ConfigEntry {
 export interface TopicConfig {
   /** Name of the topic to create. Required. */
   topic: string;
-  /** How many partitions the topic has. More partitions allow more parallel consumers. */
+  /**
+   * How many partitions the topic has. More partitions allow more parallel
+   * consumers. Ignored when `replicaAssignments` is set — then the number of
+   * assignment entries determines the partition count.
+   * @defaultValue `1`
+   */
   numPartitions?: number;
-  /** How many brokers keep a copy of each partition. Use `1` for a single-broker dev cluster. */
+  /**
+   * How many brokers keep a copy of each partition. Use `1` for a single-broker
+   * dev cluster. Ignored when `replicaAssignments` is set.
+   * @defaultValue `1`
+   */
   replicationFactor?: number;
-  /** Place specific partitions on specific brokers yourself. Overrides `replicationFactor` when set. */
+  /**
+   * Place specific partitions on specific brokers yourself. When set, the
+   * assignment list fully determines the topic's layout — the number of entries
+   * is the partition count and each entry's `replicas` is that partition's
+   * placement — so both `numPartitions` and `replicationFactor` are ignored.
+   * The entries must describe a contiguous layout: one per partition with
+   * `partition` IDs covering exactly `0` to `N-1` (unique, no gaps).
+   */
   replicaAssignments?: ReplicaAssignment[];
   /** Extra topic settings, e.g. retention. See {@link ConfigEntry}. */
   configEntries?: ConfigEntry[];
@@ -776,7 +833,11 @@ export class Connection {
    */
   constructor(connectionConfig: ConnectionConfig);
   /**
-   * Create a new topic.
+   * Create a new topic. Call this from the VU context (the default function, or
+   * `setup`/`teardown`) — not the init context, and not after `close`. Throws if
+   * `topic` is empty or a `replicaAssignments` partition is negative or
+   * duplicated (checked before contacting the broker), and if the broker rejects
+   * the request (for example, the topic already exists).
    * @param topicConfig - Name, partition count, replication, and any topic settings.
    * @remarks
    * Create topics in the test's `setup()` function so the topic exists before
@@ -785,12 +846,19 @@ export class Connection {
    */
   createTopic(topicConfig: TopicConfig): void;
   /**
-   * Delete a topic.
+   * Delete a topic. Call this from the VU context (the default function, or
+   * `setup`/`teardown`) — not the init context, and not after `close`. Throws if
+   * `topic` is empty or the broker rejects the request. Kafka removes the topic
+   * asynchronously, so it may stay visible in {@link Connection.listTopics} for a
+   * short while after this returns.
    * @param topic - Name of the topic to delete.
    */
   deleteTopic(topic: string): void;
   /**
-   * List the names of all topics on the cluster.
+   * List the names of the cluster's topics. Internal topics (such as
+   * `__consumer_offsets`) are excluded. Call this from the VU context (the
+   * default function, or `setup`/`teardown`) — not the init context, and not
+   * after `close`.
    * @returns Topic names.
    */
   listTopics(): string[];

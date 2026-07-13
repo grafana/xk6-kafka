@@ -25,6 +25,30 @@ xk6 build --with github.com/grafana/xk6-kafka
 
 This produces a `k6` binary in the current directory. No C toolchain required. Until the first release, this builds from the latest `main` and may be incomplete.
 
+## Testing
+
+Unit tests need no broker:
+
+```bash
+make test
+```
+
+The integration tests require a real Kafka broker. The easiest way is `make integration`, which starts a single-node Kafka (KRaft) via [`compose.yaml`](compose.yaml), runs the tests against it, and tears it down:
+
+```bash
+make integration
+```
+
+To keep the broker running between runs (e.g. while iterating), start it once and point the tests at it:
+
+```bash
+make broker-up
+KAFKA_BROKER=localhost:9092 make it
+make broker-down
+```
+
+`make it` fails if `KAFKA_BROKER` is unset — the integration tests never skip silently. The same `compose.yaml` broker is used in CI, so local and CI runs match.
+
 ## Usage
 
 > [!NOTE]
