@@ -29,6 +29,20 @@ type Schema struct {
 	SchemaType string `json:"schemaType"`
 }
 
+// Container bundles data with schema info for serialize/deserialize.
+type Container struct {
+	Data       interface{} `js:"data"`
+	SchemaType string      `js:"schemaType"`
+	Schema     *Schema     `js:"schema"`
+}
+
+// SubjectNameConfig holds params for computing subject names.
+type SubjectNameConfig struct {
+	Topic                 string `js:"topic"`
+	Element               string `js:"element"`
+	SubjectNameStrategy   string `js:"subjectNameStrategy"`
+}
+
 // SchemaRegistryConfig holds Schema Registry connection settings.
 type SchemaRegistryConfig struct {
 	URL       string
@@ -77,8 +91,8 @@ func NewSchemaRegistry(config *SchemaRegistryConfig) (*SchemaRegistry, error) {
 		return nil, fmt.Errorf("SchemaRegistry: failed to reach registry at %s: %w", config.URL, err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode >= 500 {
-		return nil, fmt.Errorf("SchemaRegistry: registry returned %d", resp.StatusCode)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("SchemaRegistry: registry returned %d (expected 2xx)", resp.StatusCode)
 	}
 
 	sr := &SchemaRegistry{
@@ -220,9 +234,18 @@ func (sr *SchemaRegistry) createSchema(subject string, schemaStr string, schemaT
 	}, nil
 }
 
-// GetSubjectName returns the subject name for a topic and element using TopicNameStrategy.
-func (sr *SchemaRegistry) GetSubjectName(topic string, element string, strategy string) string {
-	return sr.getSubjectName(topic, element, strategy)
+// GetSubjectName computes the registry subject name from topic, element, and naming strategy.
+func (sr *SchemaRegistry) GetSubjectName(config *SubjectNameConfig) (string, error) {
+	if config == nil {
+		return "", fmt.Errorf("SchemaRegistry: GetSubjectName requires a config")
+	}
+	if config.Topic == "" {
+		return "", fmt.Errorf("SchemaRegistry: GetSubjectName requires topic")
+	}
+	if config.Element == "" {
+		return "", fmt.Errorf("SchemaRegistry: GetSubjectName requires element")
+	}
+	return sr.getSubjectName(config.Topic, config.Element, config.SubjectNameStrategy), nil
 }
 
 // getSubjectName returns the subject name for a topic and element using TopicNameStrategy.
@@ -259,9 +282,12 @@ func decodeWireFormat(data []byte) (int, []byte, error) {
 	return schemaID, data[5:], nil
 }
 
-// Serialize encodes data to bytes. Takes a Container-like object with data, schemaType, and schema.
-func (sr *SchemaRegistry) Serialize(data interface{}, schemaType string, schema *Schema) ([]byte, error) {
-	return sr.serialize(data, schemaType, schema)
+// Serialize encodes data to bytes using the schema and schema type from Container.
+func (sr *SchemaRegistry) Serialize(container *Container) ([]byte, error) {
+	if container == nil {
+		return nil, fmt.Errorf("SchemaRegistry: Serialize requires a container")
+	}
+	return sr.serialize(container.Data, container.SchemaType, container.Schema)
 }
 
 // serialize encodes data to bytes.
@@ -324,9 +350,16 @@ func (sr *SchemaRegistry) serialize(data interface{}, schemaType string, schema 
 	}
 }
 
-// Deserialize decodes bytes to data. Takes a Container-like object with data, schemaType, and schema.
-func (sr *SchemaRegistry) Deserialize(data []byte, schemaType string, schema *Schema) (interface{}, error) {
-	return sr.deserialize(data, schemaType, schema)
+// Deserialize decodes bytes to data using schema and schema type from Container.
+func (sr *SchemaRegistry) Deserialize(container *Container) (interface{}, error) {
+	if container == nil {
+		return nil, fmt.Errorf("SchemaRegistry: Deserialize requires a container")
+	}
+	data, ok := container.Data.([]byte)
+	if !ok {
+		return nil, fmt.Errorf("SchemaRegistry: Deserialize expects data to be []byte, got %T", container.Data)
+	}
+	return sr.deserialize(data, container.SchemaType, container.Schema)
 }
 
 // deserialize decodes bytes to data.
@@ -428,8 +461,8 @@ func (sr *SchemaRegistry) deserialize(data []byte, schemaType string, schema *Sc
 func validateJSONRequired(data map[string]interface{}, schemaStr string) error {
 	var schema map[string]interface{}
 	if err := json.Unmarshal([]byte(schemaStr), &schema); err != nil {
-		// Can't parse schema, skip validation
-		return nil
+		// Invalid schema document should fail
+		return fmt.Errorf("invalid JSON schema: %w", err)
 	}
 
 	required, ok := schema["required"].([]interface{})

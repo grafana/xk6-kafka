@@ -10,7 +10,7 @@ import (
 // Test wire format encoding/decoding (task 3.3)
 func TestWireFormatRoundTrip(t *testing.T) {
 	tests := []struct {
-		name   string
+		name     string
 		schemaID int
 	}{
 		{"zero", 0},
@@ -37,8 +37,8 @@ func TestWireFormatRoundTrip(t *testing.T) {
 
 func TestDecodeWireFormatErrors(t *testing.T) {
 	tests := []struct {
-		name  string
-		data  []byte
+		name   string
+		data   []byte
 		errMsg string
 	}{
 		{"too_short", []byte{0x00, 0x00, 0x00}, "too short"},
@@ -329,4 +329,3 @@ func TestBytesSerializeWrongType(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "BYTES serialize expects []byte")
 }
-

@@ -24,7 +24,7 @@ export function getBroker() {
   if (!broker) {
     throw new Error(
       "KAFKA_BROKER is not set; run `make broker-up` (or `make integration`), " +
-        "or set KAFKA_BROKER to a reachable broker",
+      "or set KAFKA_BROKER to a reachable broker",
     );
   }
   return broker;
