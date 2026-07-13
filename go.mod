@@ -6,6 +6,7 @@ toolchain go1.25.12
 
 require (
 	github.com/grafana/sobek v0.0.0-20260429085637-a66d4790012b
+	github.com/hamba/avro v1.8.0
 	github.com/pavlo-v-chernykh/keystore-go/v4 v4.5.0
 	github.com/stretchr/testify v1.11.1
 	github.com/twmb/franz-go v1.21.3
@@ -27,7 +28,6 @@ require (
 	github.com/google/pprof v0.0.0-20260709232956-b9395ee17fa0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
-	github.com/hamba/avro v1.8.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
