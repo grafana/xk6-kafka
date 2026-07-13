@@ -64,13 +64,12 @@ func (m *Module) defineSymbols() {
 		}
 	}
 
-	// Writer/Reader/SchemaRegistry remain scaffold constructors (construct
-	// without error; method behavior lands in later changes). Connection and
-	// LoadJKS are implemented by this change.
+	// Writer/Reader/Connection are implemented by their changes. SchemaRegistry
+	// and LoadJKS are implemented by this change.
 	set("Writer", m.newWriter)
 	set("Reader", m.newReader)
 	set("Connection", m.newConnection)
-	set("SchemaRegistry", scaffoldConstructor())
+	set("SchemaRegistry", m.newSchemaRegistry)
 	set("LoadJKS", m.loadJKS)
 }
 
@@ -137,4 +136,27 @@ func (m *Module) newConnection(call sobek.ConstructorCall) *sobek.Object {
 		common.Throw(rt, err)
 	}
 	return rt.ToValue(conn).ToObject(rt)
+}
+
+// newSchemaRegistry constructs a SchemaRegistry: it decodes the config,
+// creates an authenticated HTTP client (with optional TLS), and validates
+// connectivity via the /config endpoint. The returned object exposes the
+// instance methods (e.g. serialize, deserialize, getSchema, createSchema).
+func (m *Module) newSchemaRegistry(call sobek.ConstructorCall) *sobek.Object {
+	rt := m.vu.Runtime()
+
+	var cfg *SchemaRegistryConfig
+	if len(call.Arguments) > 0 {
+		var c SchemaRegistryConfig
+		if err := rt.ExportTo(call.Argument(0), &c); err != nil {
+			common.Throw(rt, fmt.Errorf("invalid schema registry config: %w", err))
+		}
+		cfg = &c
+	}
+
+	sr, err := NewSchemaRegistry(cfg)
+	if err != nil {
+		common.Throw(rt, err)
+	}
+	return rt.ToValue(sr).ToObject(rt)
 }

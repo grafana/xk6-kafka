@@ -30,6 +30,14 @@ export function getBroker() {
   return broker;
 }
 
+// getSchemaRegistry returns SCHEMA_REGISTRY_URL or null. Useful for tests that
+// optionally use Schema Registry (e.g., registry-backed vs standalone serdes).
+// Tests that require the registry should check the result and skip if null.
+export function getSchemaRegistry() {
+  const url = __ENV.SCHEMA_REGISTRY_URL;
+  return url || null;
+}
+
 // verify runs a named check and records a failure against the error budget.
 // Returns the boolean result so callers can branch when needed.
 export function verify(name, condition) {

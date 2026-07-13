@@ -85,9 +85,50 @@ Run it with the binary you built:
 ./k6 run script.js
 ```
 
+## Schema Registry
+
+The extension supports [Confluent Schema Registry](https://docs.confluent.io/platform/current/schema-registry/) for schema management and serialization:
+
+```javascript
+import { Writer, SchemaRegistry, SCHEMA_TYPE_AVRO } from "k6/x/kafka";
+
+const sr = new SchemaRegistry({ url: "http://localhost:8081" });
+
+// Register or load a schema
+const schema = sr.createSchema({
+  subject: "my-topic-value",
+  schema: '{"type":"record","name":"User","fields":[{"name":"id","type":"int"},{"name":"name","type":"string"}]}',
+  schemaType: SCHEMA_TYPE_AVRO,
+});
+
+// Produce with schema
+const writer = new Writer({ brokers: ["localhost:9092"], topic: "my-topic" });
+writer.produce({
+  messages: [{
+    value: sr.serialize({
+      data: { id: 1, name: "Alice" },
+      schemaType: SCHEMA_TYPE_AVRO,
+      schema: schema,
+    }),
+  }],
+});
+```
+
+Supports Avro, JSON, and Protocol Buffers schemas via Confluent wire format. Standalone mode (no registry) is also supported for inline schemas.
+
 ## Compatibility
 
 This extension aims for **familiarity, not a guarantee**: most community v1 scripts are expected to run with little or no change, but identical behavior is not promised. Some legacy tuning options have no pure-Go equivalent and are accepted but ignored, so behavior can differ in edge cases. Users who need behavior-identical, zero-change continuity should stay on `mostafa/xk6-kafka`.
+
+### Schema Registry Limitations (v1)
+
+The Schema Registry implementation focuses on the core serdes workflows and does not yet include:
+
+- **Caching**: schemas are fetched from the registry on each call (no client-side cache). For bulk produce/consume operations, fetch schemas once in init and reuse them.
+- **Complex schema references**: multi-schema compositions (imports for Protobuf, `$ref` for JSON Schema) are not supported.
+- **Protobuf**: only Avro and JSON are fully supported; Protobuf serdes is not yet implemented.
+
+These may be added in future releases based on demand.
 
 A migration guide, a compatibility matrix, and known gaps for the main producer, consumer, admin, auth, and Schema Registry workflows will be published with the first release.
 
