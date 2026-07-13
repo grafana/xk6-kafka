@@ -8,26 +8,29 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"reflect"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/grafana/sobek"
 	"github.com/hamba/avro"
 )
 
 // BasicAuth holds Schema Registry basic auth credentials.
 type BasicAuth struct {
-	Username string
-	Password string //nolint:gosec // not a real secret
+	Username string `js:"username"`
+	Password string `js:"password"` //nolint:gosec // not a real secret
 }
 
 // Schema represents a schema fetched from or registered with Schema Registry.
 type Schema struct {
-	ID         int    `json:"id"`
-	Subject    string `json:"subject"`
-	Version    int    `json:"version"`
-	Schema     string `json:"schema"`
-	SchemaType string `json:"schemaType"`
+	ID         int    `json:"id" js:"id"`
+	Subject    string `json:"subject" js:"subject"`
+	Version    int    `json:"version" js:"version"`
+	Schema     string `json:"schema" js:"schema"`
+	SchemaType string `json:"schemaType" js:"schemaType"`
 }
 
 // Container bundles data with schema info for serialize/deserialize.
@@ -46,9 +49,9 @@ type SubjectNameConfig struct {
 
 // SchemaRegistryConfig holds Schema Registry connection settings.
 type SchemaRegistryConfig struct {
-	URL       string
-	BasicAuth *BasicAuth
-	TLS       *TLSConfig
+	URL       string     `js:"url"`
+	BasicAuth *BasicAuth `js:"basicAuth"`
+	TLS       *TLSConfig `js:"tls"`
 }
 
 // SchemaRegistry is a client for Schema Registry and serdes operations.
@@ -282,6 +285,205 @@ func decodeWireFormat(data []byte) (int, []byte, error) {
 	return schemaID, data[5:], nil
 }
 
+// coerceBytes normalizes byte-like values crossing the JS bridge. Depending on
+// how sobek exports arrays and typed arrays, callers may receive []byte,
+// *[]byte, ArrayBuffer, or generic numeric arrays.
+func coerceBytes(v any) ([]byte, bool) {
+	switch x := v.(type) {
+	case nil:
+		return nil, true
+	case []byte:
+		return x, true
+	case *[]byte:
+		if x == nil {
+			return nil, true
+		}
+		return *x, true
+	case sobek.ArrayBuffer:
+		return x.Bytes(), true
+	case *sobek.ArrayBuffer:
+		if x == nil {
+			return nil, true
+		}
+		return x.Bytes(), true
+	}
+
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return nil, true
+	}
+	if rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return nil, true
+		}
+		return coerceBytes(rv.Elem().Interface())
+	}
+	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array {
+		return nil, false
+	}
+
+	out := make([]byte, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		b, ok := coerceByte(rv.Index(i))
+		if !ok {
+			return nil, false
+		}
+		out[i] = b
+	}
+	return out, true
+}
+
+func coerceByte(v reflect.Value) (byte, bool) {
+	for v.IsValid() && (v.Kind() == reflect.Interface || v.Kind() == reflect.Ptr) {
+		if v.IsNil() {
+			return 0, false
+		}
+		v = v.Elem()
+	}
+
+	switch v.Kind() {
+	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint:
+		n := v.Uint()
+		if n > math.MaxUint8 {
+			return 0, false
+		}
+		return byte(n), true
+	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
+		n := v.Int()
+		if n < 0 || n > math.MaxUint8 {
+			return 0, false
+		}
+		return byte(n), true
+	case reflect.Float32, reflect.Float64:
+		n := v.Float()
+		if n < 0 || n > math.MaxUint8 || math.Trunc(n) != n {
+			return 0, false
+		}
+		return byte(n), true
+	default:
+		return 0, false
+	}
+}
+
+func normalizeAvroValue(schema avro.Schema, data any) (any, error) {
+	switch s := schema.(type) {
+	case *avro.RecordSchema:
+		record, ok := data.(map[string]any)
+		if !ok {
+			return data, nil
+		}
+		out := make(map[string]any, len(record))
+		for k, v := range record {
+			out[k] = v
+		}
+		for _, field := range s.Fields() {
+			value, ok := record[field.Name()]
+			if !ok {
+				continue
+			}
+			normalized, err := normalizeAvroValue(field.Type(), value)
+			if err != nil {
+				return nil, err
+			}
+			out[field.Name()] = normalized
+		}
+		return out, nil
+	case *avro.ArraySchema:
+		rv := reflect.ValueOf(data)
+		if !rv.IsValid() || (rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array) {
+			return data, nil
+		}
+		out := make([]any, rv.Len())
+		for i := 0; i < rv.Len(); i++ {
+			normalized, err := normalizeAvroValue(s.Items(), rv.Index(i).Interface())
+			if err != nil {
+				return nil, err
+			}
+			out[i] = normalized
+		}
+		return out, nil
+	case *avro.MapSchema:
+		record, ok := data.(map[string]any)
+		if !ok {
+			return data, nil
+		}
+		out := make(map[string]any, len(record))
+		for k, v := range record {
+			normalized, err := normalizeAvroValue(s.Values(), v)
+			if err != nil {
+				return nil, err
+			}
+			out[k] = normalized
+		}
+		return out, nil
+	case *avro.UnionSchema:
+		if data == nil {
+			return nil, nil
+		}
+		for _, branch := range s.Types() {
+			if branch.Type() == avro.Null {
+				continue
+			}
+			return normalizeAvroValue(branch, data)
+		}
+		return data, nil
+	case *avro.RefSchema:
+		return normalizeAvroValue(s.Schema(), data)
+	default:
+		return normalizeAvroPrimitive(schema.Type(), data), nil
+	}
+}
+
+func normalizeAvroPrimitive(typ avro.Type, data any) any {
+	switch typ {
+	case avro.Int:
+		if n, ok := coerceNumber(data); ok && n >= math.MinInt32 && n <= math.MaxInt32 && math.Trunc(n) == n {
+			return int32(n)
+		}
+	case avro.Long:
+		if n, ok := coerceNumber(data); ok && n >= math.MinInt64 && n <= math.MaxInt64 && math.Trunc(n) == n {
+			return int64(n)
+		}
+	case avro.Float:
+		if n, ok := coerceNumber(data); ok {
+			return float32(n)
+		}
+	case avro.Double:
+		if n, ok := coerceNumber(data); ok {
+			return n
+		}
+	case avro.Bytes:
+		if b, ok := coerceBytes(data); ok {
+			return b
+		}
+	}
+	return data
+}
+
+func coerceNumber(v any) (float64, bool) {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return 0, false
+	}
+	for rv.Kind() == reflect.Interface || rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return 0, false
+		}
+		rv = rv.Elem()
+	}
+
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return float64(rv.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return float64(rv.Uint()), true
+	case reflect.Float32, reflect.Float64:
+		return rv.Float(), true
+	default:
+		return 0, false
+	}
+}
+
 // Serialize encodes data to bytes using the schema and schema type from Container.
 func (sr *SchemaRegistry) Serialize(container *Container) ([]byte, error) {
 	if container == nil {
@@ -300,7 +502,7 @@ func (sr *SchemaRegistry) serialize(data any, schemaType string, schema *Schema)
 		return nil, fmt.Errorf("SchemaRegistry: STRING serialize expects string, got %T", data)
 
 	case "BYTES":
-		if b, ok := data.([]byte); ok {
+		if b, ok := coerceBytes(data); ok {
 			return b, nil
 		}
 		return nil, fmt.Errorf("SchemaRegistry: BYTES serialize expects []byte, got %T", data)
@@ -313,7 +515,11 @@ func (sr *SchemaRegistry) serialize(data any, schemaType string, schema *Schema)
 		if err != nil {
 			return nil, fmt.Errorf("SchemaRegistry: failed to parse Avro schema: %w", err)
 		}
-		encoded, err := avro.Marshal(avroSchema, data)
+		normalized, err := normalizeAvroValue(avroSchema, data)
+		if err != nil {
+			return nil, fmt.Errorf("SchemaRegistry: failed to normalize Avro data: %w", err)
+		}
+		encoded, err := avro.Marshal(avroSchema, normalized)
 		if err != nil {
 			return nil, fmt.Errorf("SchemaRegistry: Avro encode failed: %w", err)
 		}
@@ -355,9 +561,9 @@ func (sr *SchemaRegistry) Deserialize(container *Container) (any, error) {
 	if container == nil {
 		return nil, fmt.Errorf("SchemaRegistry: Deserialize requires a container")
 	}
-	data, ok := container.Data.([]byte)
+	data, ok := coerceBytes(container.Data)
 	if !ok {
-		return nil, fmt.Errorf("SchemaRegistry: Deserialize expects data to be []byte, got %T", container.Data)
+		return nil, fmt.Errorf("SchemaRegistry: Deserialize expects byte-like data, got %T", container.Data)
 	}
 	return sr.deserialize(data, container.SchemaType, container.Schema)
 }
