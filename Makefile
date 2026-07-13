@@ -35,9 +35,29 @@ build: ## Build a k6 binary with this extension (xk6 build)
 test: ## Run the unit tests (go test)
 	go test ./...
 
+KAFKA_BROKER ?=
+
 .PHONY: it
-it: ## Run the integration tests (xk6 test; set KAFKA_BROKER to hit a real broker)
+it: ## Run the integration tests (requires KAFKA_BROKER; see broker-up / integration)
+	@if [ -z "$(KAFKA_BROKER)" ]; then \
+	  echo "KAFKA_BROKER is not set. Run 'make integration' (starts a broker), or"; \
+	  echo "'make broker-up' then 'KAFKA_BROKER=localhost:9092 make it'."; \
+	  exit 1; \
+	fi
 	xk6 test "test/integration/*.js"
+
+.PHONY: broker-up
+broker-up: ## Start a local single-node Kafka (KRaft) and wait until ready
+	docker compose up -d --wait
+
+.PHONY: broker-down
+broker-down: ## Stop and remove the local Kafka (incl. volumes)
+	docker compose down -v
+
+.PHONY: integration
+integration: ## Start a broker, run the integration tests, then tear it down
+	@$(MAKE) broker-up
+	@set -e; trap '$(MAKE) broker-down' EXIT; KAFKA_BROKER=localhost:9092 $(MAKE) it
 
 $(LINT_BASE): $(WORKFLOW)
 	curl -fsSL $(BASE_URL) -o $@

@@ -67,11 +67,49 @@ func (m *Module) defineSymbols() {
 	// Writer/Reader/SchemaRegistry remain scaffold constructors (construct
 	// without error; method behavior lands in later changes). Connection and
 	// LoadJKS are implemented by this change.
-	set("Writer", scaffoldConstructor())
-	set("Reader", scaffoldConstructor())
+	set("Writer", m.newWriter)
+	set("Reader", m.newReader)
 	set("Connection", m.newConnection)
 	set("SchemaRegistry", scaffoldConstructor())
 	set("LoadJKS", m.loadJKS)
+}
+
+// newWriter constructs a Writer: decode the config and build a producer client.
+// The returned object exposes the instance methods (produce, close).
+func (m *Module) newWriter(call sobek.ConstructorCall) *sobek.Object {
+	rt := m.vu.Runtime()
+
+	var cfg WriterConfig
+	if len(call.Arguments) > 0 {
+		if err := rt.ExportTo(call.Argument(0), &cfg); err != nil {
+			common.Throw(rt, fmt.Errorf("invalid writer config: %w", err))
+		}
+	}
+
+	writer, err := openWriter(m.vu, cfg)
+	if err != nil {
+		common.Throw(rt, err)
+	}
+	return rt.ToValue(writer).ToObject(rt)
+}
+
+// newReader constructs a Reader: decode the config and build a consumer client.
+// The returned object exposes the instance methods (consume, close).
+func (m *Module) newReader(call sobek.ConstructorCall) *sobek.Object {
+	rt := m.vu.Runtime()
+
+	var cfg ReaderConfig
+	if len(call.Arguments) > 0 {
+		if err := rt.ExportTo(call.Argument(0), &cfg); err != nil {
+			common.Throw(rt, fmt.Errorf("invalid reader config: %w", err))
+		}
+	}
+
+	reader, err := openReader(m.vu, cfg)
+	if err != nil {
+		common.Throw(rt, err)
+	}
+	return rt.ToValue(reader).ToObject(rt)
 }
 
 // scaffoldConstructor returns a native constructor that constructs without
@@ -94,7 +132,7 @@ func (m *Module) newConnection(call sobek.ConstructorCall) *sobek.Object {
 		}
 	}
 
-	conn, err := openConnection(cfg)
+	conn, err := openConnection(m.vu, cfg)
 	if err != nil {
 		common.Throw(rt, err)
 	}
