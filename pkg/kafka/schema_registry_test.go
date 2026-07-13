@@ -9,6 +9,7 @@ import (
 
 // Test wire format encoding/decoding (task 3.3)
 func TestWireFormatRoundTrip(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		schemaID int
@@ -21,6 +22,7 @@ func TestWireFormatRoundTrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Encode
 			encoded := encodeWireFormat(tt.schemaID)
 			require.Equal(t, 5, len(encoded))
@@ -36,6 +38,7 @@ func TestWireFormatRoundTrip(t *testing.T) {
 }
 
 func TestDecodeWireFormatErrors(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		data   []byte
@@ -47,6 +50,7 @@ func TestDecodeWireFormatErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, _, err := decodeWireFormat(tt.data)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tt.errMsg)
@@ -56,6 +60,7 @@ func TestDecodeWireFormatErrors(t *testing.T) {
 
 // Test STRING serdes (task 4.5)
 func TestStringSerdes(t *testing.T) {
+	t.Parallel()
 	sr := &SchemaRegistry{config: nil}
 
 	tests := []struct {
@@ -70,6 +75,7 @@ func TestStringSerdes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Serialize
 			encoded, err := sr.serialize(tt.value, "STRING", nil)
 			require.NoError(t, err)
@@ -83,6 +89,7 @@ func TestStringSerdes(t *testing.T) {
 }
 
 func TestStringDeserializeInvalidUTF8(t *testing.T) {
+	t.Parallel()
 	sr := &SchemaRegistry{config: nil}
 	invalidUTF8 := []byte{0xFF, 0xFE}
 
@@ -93,6 +100,7 @@ func TestStringDeserializeInvalidUTF8(t *testing.T) {
 
 // Test BYTES serdes (task 4.5)
 func TestBytesSerdes(t *testing.T) {
+	t.Parallel()
 	sr := &SchemaRegistry{config: nil}
 
 	tests := []struct {
@@ -106,6 +114,7 @@ func TestBytesSerdes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Serialize
 			encoded, err := sr.serialize(tt.value, "BYTES", nil)
 			require.NoError(t, err)
@@ -121,6 +130,7 @@ func TestBytesSerdes(t *testing.T) {
 
 // Test Avro serdes (tasks 5.3-5.4)
 func TestAvroSerdes(t *testing.T) {
+	t.Parallel()
 	sr := &SchemaRegistry{config: nil}
 
 	// Simple record schema
@@ -130,7 +140,7 @@ func TestAvroSerdes(t *testing.T) {
 		SchemaType: "AVRO",
 	}
 
-	data := map[string]interface{}{
+	data := map[string]any{
 		"name": "Alice",
 		"age":  30,
 	}
@@ -145,7 +155,7 @@ func TestAvroSerdes(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify round-trip (Avro preserves types)
-	decodedMap := decoded.(map[string]interface{})
+	decodedMap := decoded.(map[string]any)
 	require.Equal(t, "Alice", decodedMap["name"])
 	// Age can be int or float64 depending on Avro version
 	switch v := decodedMap["age"].(type) {
@@ -159,6 +169,7 @@ func TestAvroSerdes(t *testing.T) {
 }
 
 func TestAvroWireFormatRoundTrip(t *testing.T) {
+	t.Parallel()
 	sr := &SchemaRegistry{config: nil}
 
 	schema := &Schema{
@@ -167,7 +178,7 @@ func TestAvroWireFormatRoundTrip(t *testing.T) {
 		SchemaType: "AVRO",
 	}
 
-	data := map[string]interface{}{"id": 42}
+	data := map[string]any{"id": 42}
 
 	// Serialize (with wire format envelope)
 	encoded, err := sr.serialize(data, "AVRO", schema)
@@ -180,7 +191,7 @@ func TestAvroWireFormatRoundTrip(t *testing.T) {
 	// Deserialize (strips envelope, verifies schema ID)
 	decoded, err := sr.deserialize(encoded, "AVRO", schema)
 	require.NoError(t, err)
-	decodedMap := decoded.(map[string]interface{})
+	decodedMap := decoded.(map[string]any)
 	// Avro may preserve int or convert to float64 depending on version
 	switch v := decodedMap["id"].(type) {
 	case int:
@@ -193,6 +204,7 @@ func TestAvroWireFormatRoundTrip(t *testing.T) {
 }
 
 func TestAvroSchemaIDMismatch(t *testing.T) {
+	t.Parallel()
 	sr := &SchemaRegistry{config: nil}
 
 	schema := &Schema{
@@ -201,7 +213,7 @@ func TestAvroSchemaIDMismatch(t *testing.T) {
 		SchemaType: "AVRO",
 	}
 
-	data := map[string]interface{}{"id": 42}
+	data := map[string]any{"id": 42}
 
 	// Serialize with schema ID 12345
 	encoded, err := sr.serialize(data, "AVRO", schema)
@@ -221,6 +233,7 @@ func TestAvroSchemaIDMismatch(t *testing.T) {
 
 // Test JSON serdes (tasks 6.3-6.5)
 func TestJSONSerdes(t *testing.T) {
+	t.Parallel()
 	sr := &SchemaRegistry{config: nil}
 
 	schema := &Schema{
@@ -229,7 +242,7 @@ func TestJSONSerdes(t *testing.T) {
 		SchemaType: "JSON",
 	}
 
-	data := map[string]interface{}{
+	data := map[string]any{
 		"name": "Bob",
 		"age":  25,
 	}
@@ -241,12 +254,13 @@ func TestJSONSerdes(t *testing.T) {
 	// Deserialize
 	decoded, err := sr.deserialize(encoded, "JSON", schema)
 	require.NoError(t, err)
-	decodedMap := decoded.(map[string]interface{})
+	decodedMap := decoded.(map[string]any)
 	require.Equal(t, "Bob", decodedMap["name"])
 	require.Equal(t, float64(25), decodedMap["age"])
 }
 
 func TestJSONRequiredFieldValidation(t *testing.T) {
+	t.Parallel()
 	sr := &SchemaRegistry{config: nil}
 
 	schema := &Schema{
@@ -255,7 +269,7 @@ func TestJSONRequiredFieldValidation(t *testing.T) {
 	}
 
 	// Missing required field
-	data := map[string]interface{}{
+	data := map[string]any{
 		"age": 25,
 	}
 
@@ -265,6 +279,7 @@ func TestJSONRequiredFieldValidation(t *testing.T) {
 }
 
 func TestJSONWireFormatRoundTrip(t *testing.T) {
+	t.Parallel()
 	sr := &SchemaRegistry{config: nil}
 
 	schema := &Schema{
@@ -273,7 +288,7 @@ func TestJSONWireFormatRoundTrip(t *testing.T) {
 		SchemaType: "JSON",
 	}
 
-	data := map[string]interface{}{
+	data := map[string]any{
 		"msg": "hello",
 	}
 
@@ -288,11 +303,12 @@ func TestJSONWireFormatRoundTrip(t *testing.T) {
 	// Deserialize (strips envelope, verifies schema ID)
 	decoded, err := sr.deserialize(encoded, "JSON", schema)
 	require.NoError(t, err)
-	decodedMap := decoded.(map[string]interface{})
+	decodedMap := decoded.(map[string]any)
 	require.Equal(t, "hello", decodedMap["msg"])
 }
 
 func TestJSONMalformedBytes(t *testing.T) {
+	t.Parallel()
 	sr := &SchemaRegistry{config: nil}
 
 	schema := &Schema{
@@ -307,6 +323,7 @@ func TestJSONMalformedBytes(t *testing.T) {
 
 // Error cases
 func TestUnsupportedSchemaType(t *testing.T) {
+	t.Parallel()
 	sr := &SchemaRegistry{config: nil}
 
 	_, err := sr.serialize("data", "UNKNOWN", nil)
@@ -315,6 +332,7 @@ func TestUnsupportedSchemaType(t *testing.T) {
 }
 
 func TestStringSerializeWrongType(t *testing.T) {
+	t.Parallel()
 	sr := &SchemaRegistry{config: nil}
 
 	_, err := sr.serialize(123, "STRING", nil)
@@ -323,6 +341,7 @@ func TestStringSerializeWrongType(t *testing.T) {
 }
 
 func TestBytesSerializeWrongType(t *testing.T) {
+	t.Parallel()
 	sr := &SchemaRegistry{config: nil}
 
 	_, err := sr.serialize("not bytes", "BYTES", nil)

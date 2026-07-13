@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
@@ -17,7 +18,7 @@ import (
 // BasicAuth holds Schema Registry basic auth credentials.
 type BasicAuth struct {
 	Username string
-	Password string
+	Password string //nolint:gosec // not a real secret
 }
 
 // Schema represents a schema fetched from or registered with Schema Registry.
@@ -31,16 +32,16 @@ type Schema struct {
 
 // Container bundles data with schema info for serialize/deserialize.
 type Container struct {
-	Data       interface{} `js:"data"`
-	SchemaType string      `js:"schemaType"`
-	Schema     *Schema     `js:"schema"`
+	Data       any     `js:"data"`
+	SchemaType string  `js:"schemaType"`
+	Schema     *Schema `js:"schema"`
 }
 
 // SubjectNameConfig holds params for computing subject names.
 type SubjectNameConfig struct {
-	Topic                 string `js:"topic"`
-	Element               string `js:"element"`
-	SubjectNameStrategy   string `js:"subjectNameStrategy"`
+	Topic               string `js:"topic"`
+	Element             string `js:"element"`
+	SubjectNameStrategy string `js:"subjectNameStrategy"`
 }
 
 // SchemaRegistryConfig holds Schema Registry connection settings.
@@ -78,7 +79,7 @@ func NewSchemaRegistry(config *SchemaRegistryConfig) (*SchemaRegistry, error) {
 	}
 
 	// Validate connectivity with /config endpoint (requires auth)
-	req, err := http.NewRequest("GET", config.URL+"/config", nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, config.URL+"/config", nil)
 	if err != nil {
 		return nil, fmt.Errorf("SchemaRegistry: failed to create request: %w", err)
 	}
@@ -86,11 +87,11 @@ func NewSchemaRegistry(config *SchemaRegistryConfig) (*SchemaRegistry, error) {
 		req.SetBasicAuth(config.BasicAuth.Username, config.BasicAuth.Password)
 	}
 
-	resp, err := httpClient.Do(req)
+	resp, err := httpClient.Do(req) //nolint:gosec // registry URL is configured, not user input
 	if err != nil {
 		return nil, fmt.Errorf("SchemaRegistry: failed to reach registry at %s: %w", config.URL, err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("SchemaRegistry: registry returned %d (expected 2xx)", resp.StatusCode)
 	}
@@ -124,14 +125,12 @@ func (sr *SchemaRegistry) getSchema(subject string, version *int) (*Schema, erro
 		return nil, fmt.Errorf("SchemaRegistry: getSchema requires registry configuration (standalone mode not supported)")
 	}
 
-	path := fmt.Sprintf("/subjects/%s/versions", subject)
+	path := fmt.Sprintf("/subjects/%s/versions/latest", subject)
 	if version != nil {
 		path = fmt.Sprintf("/subjects/%s/versions/%d", subject, *version)
-	} else {
-		path = fmt.Sprintf("/subjects/%s/versions/latest", subject)
 	}
 
-	req, err := http.NewRequest("GET", sr.config.URL+path, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, sr.config.URL+path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("SchemaRegistry: failed to create request: %w", err)
 	}
@@ -140,15 +139,14 @@ func (sr *SchemaRegistry) getSchema(subject string, version *int) (*Schema, erro
 		req.SetBasicAuth(sr.config.BasicAuth.Username, sr.config.BasicAuth.Password)
 	}
 
-	resp, err := sr.client.Do(req)
+	resp, err := sr.client.Do(req) //nolint:gosec // registry URL is configured, not user input
 	if err != nil {
 		return nil, fmt.Errorf("SchemaRegistry: request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("SchemaRegistry: GET %s returned %d: %s", path, resp.StatusCode, string(body))
+		return nil, fmt.Errorf("SchemaRegistry: GET %s returned %d", path, resp.StatusCode)
 	}
 
 	var schema Schema
@@ -177,7 +175,7 @@ func (sr *SchemaRegistry) createSchema(subject string, schemaStr string, schemaT
 		return nil, fmt.Errorf("SchemaRegistry: createSchema requires registry configuration (standalone mode not supported)")
 	}
 
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"schema":     schemaStr,
 		"schemaType": schemaType,
 	}
@@ -187,7 +185,8 @@ func (sr *SchemaRegistry) createSchema(subject string, schemaStr string, schemaT
 		return nil, fmt.Errorf("SchemaRegistry: failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", sr.config.URL+"/subjects/"+subject+"/versions", bytes.NewReader(body))
+	url := sr.config.URL + "/subjects/" + subject + "/versions"
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("SchemaRegistry: failed to create request: %w", err)
 	}
@@ -197,19 +196,20 @@ func (sr *SchemaRegistry) createSchema(subject string, schemaStr string, schemaT
 		req.SetBasicAuth(sr.config.BasicAuth.Username, sr.config.BasicAuth.Password)
 	}
 
-	resp, err := sr.client.Do(req)
+	resp, err := sr.client.Do(req) //nolint:gosec // registry URL is configured, not user input
 	if err != nil {
 		return nil, fmt.Errorf("SchemaRegistry: request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("SchemaRegistry: POST /subjects/%s/versions returned %d: %s", subject, resp.StatusCode, string(respBody))
+		statusMsg := fmt.Sprintf("POST /subjects/%s/versions returned %d: %s", subject, resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("SchemaRegistry: %s", statusMsg)
 	}
 
 	// Decode registry response for ID and version
-	var registryResp map[string]interface{}
+	var registryResp map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&registryResp); err != nil {
 		return nil, fmt.Errorf("SchemaRegistry: failed to decode response: %w", err)
 	}
@@ -264,7 +264,7 @@ func (sr *SchemaRegistry) getSubjectName(topic string, element string, strategy 
 func encodeWireFormat(schemaID int) []byte {
 	buf := make([]byte, 5)
 	buf[0] = 0x00
-	binary.BigEndian.PutUint32(buf[1:], uint32(schemaID))
+	binary.BigEndian.PutUint32(buf[1:], uint32(schemaID)) //nolint:gosec // schemaID is valid int32
 	return buf
 }
 
@@ -291,7 +291,7 @@ func (sr *SchemaRegistry) Serialize(container *Container) ([]byte, error) {
 }
 
 // serialize encodes data to bytes.
-func (sr *SchemaRegistry) serialize(data interface{}, schemaType string, schema *Schema) ([]byte, error) {
+func (sr *SchemaRegistry) serialize(data any, schemaType string, schema *Schema) ([]byte, error) {
 	switch schemaType {
 	case "STRING":
 		if str, ok := data.(string); ok {
@@ -328,7 +328,7 @@ func (sr *SchemaRegistry) serialize(data interface{}, schemaType string, schema 
 			return nil, fmt.Errorf("SchemaRegistry: JSON serialize requires schema")
 		}
 		// Validate data against schema (basic: required fields)
-		dataMap, ok := data.(map[string]interface{})
+		dataMap, ok := data.(map[string]any)
 		if ok {
 			if err := validateJSONRequired(dataMap, schema.Schema); err != nil {
 				return nil, fmt.Errorf("SchemaRegistry: JSON validation failed: %w", err)
@@ -351,7 +351,7 @@ func (sr *SchemaRegistry) serialize(data interface{}, schemaType string, schema 
 }
 
 // Deserialize decodes bytes to data using schema and schema type from Container.
-func (sr *SchemaRegistry) Deserialize(container *Container) (interface{}, error) {
+func (sr *SchemaRegistry) Deserialize(container *Container) (any, error) {
 	if container == nil {
 		return nil, fmt.Errorf("SchemaRegistry: Deserialize requires a container")
 	}
@@ -362,20 +362,31 @@ func (sr *SchemaRegistry) Deserialize(container *Container) (interface{}, error)
 	return sr.deserialize(data, container.SchemaType, container.Schema)
 }
 
+// checkAndStripWireFormat validates and strips the wire format envelope if present.
+// Returns the remaining data and any error. If no envelope, returns original data.
+func (sr *SchemaRegistry) checkAndStripWireFormat(data []byte, schema *Schema) ([]byte, error) {
+	if schema == nil || schema.ID == 0 || len(data) < 5 || data[0] != 0x00 {
+		return data, nil
+	}
+	schemaID, remaining, err := decodeWireFormat(data)
+	if err != nil {
+		return nil, err
+	}
+	if schemaID != schema.ID {
+		return nil, fmt.Errorf("SchemaRegistry: schema ID mismatch: expected %d, got %d", schema.ID, schemaID)
+	}
+	return remaining, nil
+}
+
 // deserialize decodes bytes to data.
-func (sr *SchemaRegistry) deserialize(data []byte, schemaType string, schema *Schema) (interface{}, error) {
+func (sr *SchemaRegistry) deserialize(data []byte, schemaType string, schema *Schema) (any, error) {
 	switch schemaType {
 	case "STRING":
 		// Check for wire format envelope
-		if schema != nil && schema.ID != 0 && len(data) >= 5 && data[0] == 0x00 {
-			schemaID, remaining, err := decodeWireFormat(data)
-			if err != nil {
-				return nil, err
-			}
-			if schemaID != schema.ID {
-				return nil, fmt.Errorf("SchemaRegistry: schema ID mismatch: expected %d, got %d", schema.ID, schemaID)
-			}
-			data = remaining
+		var err error
+		data, err = sr.checkAndStripWireFormat(data, schema)
+		if err != nil {
+			return nil, err
 		}
 		// Validate UTF-8
 		if !utf8.Valid(data) {
@@ -385,15 +396,10 @@ func (sr *SchemaRegistry) deserialize(data []byte, schemaType string, schema *Sc
 
 	case "BYTES":
 		// Check for wire format envelope
-		if schema != nil && schema.ID != 0 && len(data) >= 5 && data[0] == 0x00 {
-			schemaID, remaining, err := decodeWireFormat(data)
-			if err != nil {
-				return nil, err
-			}
-			if schemaID != schema.ID {
-				return nil, fmt.Errorf("SchemaRegistry: schema ID mismatch: expected %d, got %d", schema.ID, schemaID)
-			}
-			data = remaining
+		var err error
+		data, err = sr.checkAndStripWireFormat(data, schema)
+		if err != nil {
+			return nil, err
 		}
 		return data, nil
 
@@ -403,15 +409,10 @@ func (sr *SchemaRegistry) deserialize(data []byte, schemaType string, schema *Sc
 		}
 
 		// Check for wire format envelope
-		if schema.ID != 0 && len(data) >= 5 && data[0] == 0x00 {
-			schemaID, remaining, err := decodeWireFormat(data)
-			if err != nil {
-				return nil, err
-			}
-			if schemaID != schema.ID {
-				return nil, fmt.Errorf("SchemaRegistry: schema ID mismatch: expected %d, got %d", schema.ID, schemaID)
-			}
-			data = remaining
+		var err error
+		data, err = sr.checkAndStripWireFormat(data, schema)
+		if err != nil {
+			return nil, err
 		}
 
 		avroSchema, err := avro.Parse(schema.Schema)
@@ -419,7 +420,7 @@ func (sr *SchemaRegistry) deserialize(data []byte, schemaType string, schema *Sc
 			return nil, fmt.Errorf("SchemaRegistry: failed to parse Avro schema: %w", err)
 		}
 
-		var result interface{}
+		var result any
 		if err := avro.Unmarshal(avroSchema, data, &result); err != nil {
 			return nil, fmt.Errorf("SchemaRegistry: Avro decode failed: %w", err)
 		}
@@ -431,18 +432,13 @@ func (sr *SchemaRegistry) deserialize(data []byte, schemaType string, schema *Sc
 		}
 
 		// Check for wire format envelope
-		if schema.ID != 0 && len(data) >= 5 && data[0] == 0x00 {
-			schemaID, remaining, err := decodeWireFormat(data)
-			if err != nil {
-				return nil, err
-			}
-			if schemaID != schema.ID {
-				return nil, fmt.Errorf("SchemaRegistry: schema ID mismatch: expected %d, got %d", schema.ID, schemaID)
-			}
-			data = remaining
+		var err error
+		data, err = sr.checkAndStripWireFormat(data, schema)
+		if err != nil {
+			return nil, err
 		}
 
-		var result map[string]interface{}
+		var result map[string]any
 		if err := json.Unmarshal(data, &result); err != nil {
 			return nil, fmt.Errorf("SchemaRegistry: JSON decode failed: %w", err)
 		}
@@ -458,14 +454,14 @@ func (sr *SchemaRegistry) deserialize(data []byte, schemaType string, schema *Sc
 }
 
 // validateJSONRequired performs basic JSON Schema validation: checks required fields.
-func validateJSONRequired(data map[string]interface{}, schemaStr string) error {
-	var schema map[string]interface{}
+func validateJSONRequired(data map[string]any, schemaStr string) error {
+	var schema map[string]any
 	if err := json.Unmarshal([]byte(schemaStr), &schema); err != nil {
 		// Invalid schema document should fail
 		return fmt.Errorf("invalid JSON schema: %w", err)
 	}
 
-	required, ok := schema["required"].([]interface{})
+	required, ok := schema["required"].([]any)
 	if !ok {
 		// No required fields, validation passes
 		return nil

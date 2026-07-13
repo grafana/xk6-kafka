@@ -111,13 +111,6 @@ func (m *Module) newReader(call sobek.ConstructorCall) *sobek.Object {
 	return rt.ToValue(reader).ToObject(rt)
 }
 
-// scaffoldConstructor returns a native constructor that constructs without
-// error. It returns nil so the runtime supplies the constructed object.
-// Method behavior is added by later changes.
-func scaffoldConstructor() func(sobek.ConstructorCall) *sobek.Object {
-	return func(_ sobek.ConstructorCall) *sobek.Object { return nil }
-}
-
 // newConnection constructs a Connection: it decodes the config, builds an
 // authenticated client, and verifies connectivity (failing on an unreachable
 // cluster). The returned object exposes the instance methods (e.g. close).
