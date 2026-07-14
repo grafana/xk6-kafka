@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/grafana/sobek"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,6 +37,17 @@ func TestWireFormatRoundTrip(t *testing.T) {
 			require.Equal(t, 0, len(remaining))
 		})
 	}
+}
+
+func TestBytesToUint8Array(t *testing.T) {
+	t.Parallel()
+	rt := sobek.New()
+	v, err := bytesToUint8Array(rt, []byte{1, 2, 3})
+	require.NoError(t, err)
+	require.NoError(t, rt.Set("v", v))
+	res, err := rt.RunString(`v instanceof Uint8Array && v.length === 3 && v[0] === 1 && v[2] === 3`)
+	require.NoError(t, err)
+	require.True(t, res.ToBoolean(), "expected a Uint8Array with the original bytes")
 }
 
 func TestReqContextNilVU(t *testing.T) {

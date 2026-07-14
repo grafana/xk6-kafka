@@ -539,12 +539,31 @@ func coerceNumber(v any) (float64, bool) {
 	}
 }
 
-// Serialize encodes data to bytes using the schema and schema type from Container.
-func (sr *SchemaRegistry) Serialize(container *Container) ([]byte, error) {
+// Serialize encodes data using the schema and schema type from Container and
+// returns a JS Uint8Array (per index.d.ts), suitable for writer.produce.
+func (sr *SchemaRegistry) Serialize(container *Container) (sobek.Value, error) {
 	if container == nil {
 		return nil, fmt.Errorf("SchemaRegistry: Serialize requires a container")
 	}
-	return sr.serialize(container.Data, container.SchemaType, container.Schema)
+	if sr.vu == nil {
+		return nil, fmt.Errorf("SchemaRegistry: Serialize requires a runtime (call it from a VU)")
+	}
+	b, err := sr.serialize(container.Data, container.SchemaType, container.Schema)
+	if err != nil {
+		return nil, err
+	}
+	return bytesToUint8Array(sr.vu.Runtime(), b)
+}
+
+// bytesToUint8Array wraps raw bytes in a JS Uint8Array via the runtime. sobek
+// exports a Go []byte as a plain Array, so an explicit Uint8Array is built to
+// match the contract's return type.
+func bytesToUint8Array(rt *sobek.Runtime, b []byte) (sobek.Value, error) {
+	u8, err := rt.New(rt.Get("Uint8Array"), rt.ToValue(rt.NewArrayBuffer(b)))
+	if err != nil {
+		return nil, fmt.Errorf("SchemaRegistry: building Uint8Array: %w", err)
+	}
+	return u8, nil
 }
 
 // serialize encodes data to bytes.
