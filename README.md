@@ -114,7 +114,7 @@ writer.produce({
 });
 ```
 
-Supports Avro, JSON, and Protocol Buffers schemas via Confluent wire format. Standalone mode (no registry) is also supported for inline schemas.
+Supports Avro and JSON schemas via Confluent wire format. Standalone mode (no registry) is also supported for inline schemas. Protobuf serdes is not supported in v1 (see the limitations below).
 
 ## Compatibility
 
