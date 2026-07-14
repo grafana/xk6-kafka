@@ -22,6 +22,7 @@ type RootModule struct{}
 type Module struct {
 	vu      modules.VU
 	exports *sobek.Object
+	metrics *kafkaMetrics
 }
 
 var (
@@ -33,9 +34,30 @@ var (
 // export object with the flat constants and the public symbols.
 func (*RootModule) NewModuleInstance(vu modules.VU) modules.Instance {
 	m := &Module{vu: vu, exports: vu.Runtime().NewObject()}
+	// Register custom metrics from the init environment (present when the module
+	// is imported during VU init). If absent, metrics are simply not emitted.
+	if ie := vu.InitEnv(); ie != nil && ie.Registry != nil {
+		m.metrics = registerMetrics(ie.Registry)
+	}
 	m.defineConstants()
 	m.defineSymbols()
 	return m
+}
+
+// writerCollector / readerCollector build a per-client metrics collector, or nil
+// when metrics are unavailable (no registry).
+func (m *Module) writerCollector() *metricsCollector {
+	if m.metrics == nil {
+		return nil
+	}
+	return newMetricsCollector(m.metrics, roleWriter)
+}
+
+func (m *Module) readerCollector() *metricsCollector {
+	if m.metrics == nil {
+		return nil
+	}
+	return newMetricsCollector(m.metrics, roleReader)
 }
 
 // Exports implements modules.Instance. The module members are exposed as the
@@ -85,7 +107,7 @@ func (m *Module) newWriter(call sobek.ConstructorCall) *sobek.Object {
 		}
 	}
 
-	writer, err := openWriter(m.vu, cfg)
+	writer, err := openWriter(m.vu, cfg, m.writerCollector())
 	if err != nil {
 		common.Throw(rt, err)
 	}
@@ -104,7 +126,7 @@ func (m *Module) newReader(call sobek.ConstructorCall) *sobek.Object {
 		}
 	}
 
-	reader, err := openReader(m.vu, cfg)
+	reader, err := openReader(m.vu, cfg, m.readerCollector())
 	if err != nil {
 		common.Throw(rt, err)
 	}

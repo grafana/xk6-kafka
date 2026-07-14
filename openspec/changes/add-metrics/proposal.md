@@ -11,26 +11,26 @@ deferred by the producer and consumer changes; this change delivers them.
 - Writer emits per-produce metrics: `kafka_writer_write_count`,
   `kafka_writer_message_count`, `kafka_writer_message_bytes`,
   `kafka_writer_error_count`, `kafka_writer_write_seconds`,
-  `kafka_writer_batch_seconds`, `kafka_writer_wait_seconds`,
-  `kafka_writer_retries_count`, `kafka_writer_batch_size`,
+  `kafka_writer_wait_seconds`, `kafka_writer_batch_size`,
   `kafka_writer_batch_bytes`, `kafka_writer_dial_count`,
   `kafka_writer_dial_seconds`.
 - Reader emits per-consume metrics: `kafka_reader_message_count`,
   `kafka_reader_message_bytes`, `kafka_reader_fetches_count`,
   `kafka_reader_error_count`, `kafka_reader_lag`, `kafka_reader_offset`,
   `kafka_reader_fetch_bytes`, `kafka_reader_fetch_size`,
-  `kafka_reader_fetch_seconds`, `kafka_reader_read_seconds`,
-  `kafka_reader_wait_seconds`, `kafka_reader_dial_count`,
-  `kafka_reader_dial_seconds`, `kafka_reader_rebalance_count`,
+  `kafka_reader_read_seconds`, `kafka_reader_wait_seconds`,
+  `kafka_reader_dial_count`, `kafka_reader_dial_seconds`,
   `kafka_reader_timeouts_count`.
 - Metrics are collected via franz-go client hooks (`kgo.WithHooks`) plus
   counting at produce/consume, registered on the k6 metrics registry, and
   pushed to the VU sample buffer. Topic-scoped metrics carry a `topic` tag;
   connection- and group-level metrics are untagged (no `group` tag).
-- Community metrics that derive from `segmentio/kafka-go` stats and have no
-  franz-go equivalent (`kafka_reader_queue_length`,
-  `kafka_reader_queue_capacity`, and config-echo gauges) are **not** emitted and
-  are documented as omitted.
+- Community metrics with no franz-go source are **not** emitted and are
+  documented as omitted: the `segmentio/kafka-go` stats gauges
+  (`kafka_reader_queue_length`, `kafka_reader_queue_capacity`, config-echo
+  gauges) and the ones franz-go exposes no hook for
+  (`kafka_writer_retries_count`, `kafka_writer_batch_seconds`,
+  `kafka_reader_rebalance_count`).
 - No change to `index.d.ts`: like the community extension, these metrics appear
   in the summary and are not part of the typed API surface.
 

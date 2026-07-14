@@ -48,16 +48,18 @@ type ProduceConfig struct {
 
 // Writer produces messages to Kafka.
 type Writer struct {
-	vu     modules.VU
-	client *kgo.Client
+	vu           modules.VU
+	client       *kgo.Client
+	collector    *metricsCollector
+	defaultTopic string
 }
 
 // openWriter builds a producer client from the config.
-func openWriter(vu modules.VU, cfg WriterConfig) (*Writer, error) {
+func openWriter(vu modules.VU, cfg WriterConfig, collector *metricsCollector) (*Writer, error) {
 	if len(cfg.Brokers) == 0 {
 		return nil, errors.New("at least one broker is required")
 	}
-	opts, err := writerOptions(cfg)
+	opts, err := writerOptions(cfg, collector)
 	if err != nil {
 		return nil, err
 	}
@@ -65,14 +67,17 @@ func openWriter(vu modules.VU, cfg WriterConfig) (*Writer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating producer: %w", err)
 	}
-	return &Writer{vu: vu, client: client}, nil
+	return &Writer{vu: vu, client: client, collector: collector, defaultTopic: cfg.Topic}, nil
 }
 
 // writerOptions assembles the franz-go options for a producer.
-func writerOptions(cfg WriterConfig) ([]kgo.Opt, error) {
+func writerOptions(cfg WriterConfig, collector *metricsCollector) ([]kgo.Opt, error) {
 	opts, err := clientOptions(cfg.Brokers, cfg.SASL, cfg.TLS)
 	if err != nil {
 		return nil, err
+	}
+	if collector != nil {
+		opts = append(opts, kgo.WithHooks(collector.hooks()...))
 	}
 
 	if cfg.Topic != "" {
@@ -183,7 +188,29 @@ func (w *Writer) Produce(config ProduceConfig) error {
 	for i := range config.Messages {
 		records = append(records, marshalRecord(&config.Messages[i]))
 	}
-	if err := w.client.ProduceSync(w.vu.Context(), records...).FirstErr(); err != nil {
+
+	results := w.client.ProduceSync(w.vu.Context(), records...)
+
+	// Count only records that actually succeeded (per-record results), so a
+	// failed or partially-failed produce does not report messages as written.
+	msgCount := make(map[string]int64)
+	msgBytes := make(map[string]int64)
+	var errCount int64
+	for _, res := range results {
+		if res.Err != nil {
+			errCount++
+			continue
+		}
+		topic := res.Record.Topic
+		if topic == "" {
+			topic = w.defaultTopic
+		}
+		msgCount[topic]++
+		msgBytes[topic] += int64(len(res.Record.Key) + len(res.Record.Value))
+	}
+	w.collector.flushProduce(w.vu, msgCount, msgBytes, errCount)
+
+	if err := results.FirstErr(); err != nil {
 		return fmt.Errorf("producing messages: %w", err)
 	}
 	return nil
@@ -200,6 +227,7 @@ func (w *Writer) Close() {
 		ctx = w.vu.Context()
 	}
 	_ = w.client.Flush(ctx)
+	w.collector.flushClose(w.vu)
 	w.client.Close()
 	w.client = nil
 }

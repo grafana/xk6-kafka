@@ -16,15 +16,13 @@ value (buffered by the hooks, drained at flush), not an aggregate.
 
 Writer metrics: `kafka_writer_write_count`, `kafka_writer_message_count`,
 `kafka_writer_message_bytes`, `kafka_writer_error_count`,
-`kafka_writer_retries_count`, `kafka_writer_dial_count` (counters);
-`kafka_writer_write_seconds`, `kafka_writer_batch_seconds`,
+`kafka_writer_dial_count` (counters); `kafka_writer_write_seconds`,
 `kafka_writer_wait_seconds`, `kafka_writer_dial_seconds`,
 `kafka_writer_batch_size`, `kafka_writer_batch_bytes` (trends).
 
 Reader metrics: `kafka_reader_message_count`, `kafka_reader_message_bytes`,
 `kafka_reader_fetches_count`, `kafka_reader_error_count`,
-`kafka_reader_rebalance_count`, `kafka_reader_timeouts_count`,
-`kafka_reader_dial_count` (counters); `kafka_reader_fetch_seconds`,
+`kafka_reader_timeouts_count`, `kafka_reader_dial_count` (counters);
 `kafka_reader_read_seconds`, `kafka_reader_wait_seconds`,
 `kafka_reader_dial_seconds`, `kafka_reader_fetch_bytes`,
 `kafka_reader_fetch_size`, `kafka_reader_offset`, `kafka_reader_lag` (trends).
@@ -42,14 +40,19 @@ Reader metrics: `kafka_reader_message_count`, `kafka_reader_message_bytes`,
 Topic-scoped metrics SHALL carry a `topic` tag identifying the topic, and a
 single `produce` or `consume` call that spans multiple topics SHALL attribute
 them per topic (one sample set per distinct topic), never to a single topic.
-Topic-scoped metrics are the message-level metrics (`*_message_count`,
-`*_message_bytes`, `kafka_reader_lag`, `kafka_reader_offset`) and the
-batch/fetch-level metrics for which franz-go supplies the topic (`*_batch_*`,
-`*_fetch_*`, `*_write_seconds`, `*_read_seconds`).
+Topic-scoped metrics are the ones franz-go attributes to a topic: the
+message-level metrics (`*_message_count`, `*_message_bytes`,
+`kafka_reader_lag`, `kafka_reader_offset`) and the per-topic batch/fetch metrics
+(`kafka_writer_write_count`, `kafka_writer_batch_size`,
+`kafka_writer_batch_bytes`, `kafka_reader_fetches_count`,
+`kafka_reader_fetch_size`, `kafka_reader_fetch_bytes`).
 
 Metrics that are not topic-scoped SHALL be emitted without a `topic` tag rather
-than attributed to an arbitrary topic: connection-level (`*_dial_count`,
-`*_dial_seconds`) and group-level (`kafka_reader_rebalance_count`).
+than attributed to an arbitrary topic. These are the broker-request-level timing
+metrics — `*_write_seconds`, `*_read_seconds`, `*_wait_seconds`,
+`*_dial_seconds`, `*_dial_count` (a single broker request batches many
+topics/partitions, so no single topic applies) — and the call-level
+`*_error_count` / `kafka_reader_timeouts_count`.
 
 #### Scenario: Multi-topic produce attributes counts per topic
 
@@ -85,10 +88,12 @@ A `Writer` SHALL emit its metrics to the VU sample buffer at the end of each
 - **THEN** that message's metrics are attributed to the writer's default topic,
   not to an empty topic
 
-#### Scenario: Produce failure records an error
+#### Scenario: Produce failure records an error, not a message count
 
-- **WHEN** a `writer.produce` call fails
-- **THEN** `kafka_writer_error_count` increases
+- **WHEN** a `writer.produce` call fails (or partially fails)
+- **THEN** `kafka_writer_error_count` increases by the number of failed records,
+  and `kafka_writer_message_count` / `kafka_writer_message_bytes` count only the
+  records that actually succeeded (none, on a total failure)
 
 #### Scenario: Metrics require the VU context
 
@@ -119,6 +124,13 @@ A `Reader` SHALL emit its metrics to the VU sample buffer at the end of each
 - **WHEN** a `reader.consume` call times out before reaching its limit
 - **THEN** `kafka_reader_timeouts_count` increases
 
+#### Scenario: A consume that returns no messages does not count messages
+
+- **WHEN** a `reader.consume` call returns `nil` with an error (fetch error,
+  cancellation, or a non-`expectTimeout` timeout)
+- **THEN** `kafka_reader_message_count` / `kafka_reader_message_bytes` are not
+  emitted for that call; only the relevant error/timeout counter is
+
 ### Requirement: Pending metrics are flushed on close
 
 `Writer.close` and `Reader.close` SHALL flush any metrics accumulated since the
@@ -136,15 +148,18 @@ is available.
 
 ### Requirement: Omitted community metrics are documented, not emitted
 
-The extension MUST document, rather than emit, community metrics that derive
-from the `segmentio/kafka-go` stats structs and have no `twmb/franz-go`
-equivalent. Such metrics SHALL be absent from the summary (not emitted as zero
-or faked), and their absence SHALL be recorded in this change's own
-user-facing docs (a README metrics section), independent of any other change.
+The extension MUST document, rather than emit, community metrics that have no
+`twmb/franz-go` source. These are the `segmentio/kafka-go` stats-derived gauges
+(`kafka_reader_queue_length`, `kafka_reader_queue_capacity`, config-echo gauges)
+and the metrics for which franz-go exposes no hook: `kafka_writer_retries_count`,
+`kafka_writer_batch_seconds`, and `kafka_reader_rebalance_count`. Such metrics
+SHALL be absent from the summary (not emitted as zero or faked), and their
+absence SHALL be recorded in this change's own user-facing docs (a README
+metrics section), independent of any other change.
 
-#### Scenario: Queue gauges are absent
+#### Scenario: Unsupported metrics are absent
 
-- **WHEN** a test inspects the summary for `kafka_reader_queue_length` or
-  `kafka_reader_queue_capacity`
+- **WHEN** a test inspects the summary for `kafka_reader_queue_length`,
+  `kafka_writer_retries_count`, or `kafka_reader_rebalance_count`
 - **THEN** those metrics are absent (documented as unsupported), and their
   absence does not fail the run
