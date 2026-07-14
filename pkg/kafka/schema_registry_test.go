@@ -24,7 +24,8 @@ func TestWireFormatRoundTrip(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			// Encode
-			encoded := encodeWireFormat(tt.schemaID)
+			encoded, err := encodeWireFormat(tt.schemaID)
+			require.NoError(t, err)
 			require.Equal(t, 5, len(encoded))
 			require.Equal(t, byte(0x00), encoded[0])
 
@@ -34,6 +35,14 @@ func TestWireFormatRoundTrip(t *testing.T) {
 			require.Equal(t, tt.schemaID, decoded)
 			require.Equal(t, 0, len(remaining))
 		})
+	}
+}
+
+func TestEncodeWireFormatOutOfRange(t *testing.T) {
+	t.Parallel()
+	for _, id := range []int{-1, math.MaxUint32 + 1} {
+		_, err := encodeWireFormat(id)
+		require.Error(t, err, "schema ID %d should be rejected", id)
 	}
 }
 

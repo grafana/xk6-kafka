@@ -223,7 +223,10 @@ func (sr *SchemaRegistry) createSchema(subject string, schemaStr string, schemaT
 		return nil, fmt.Errorf("SchemaRegistry: response missing schema id")
 	}
 
-	version := 1
+	// Confluent's POST /subjects/{subject}/versions returns only the schema id;
+	// version is usually absent. Report it only when the registry includes it,
+	// leaving 0 ("unknown") otherwise rather than fabricating a value.
+	version := 0
 	if v, ok := registryResp["version"].(float64); ok {
 		version = int(v)
 	}
@@ -264,12 +267,30 @@ func (sr *SchemaRegistry) getSubjectName(topic string, element string, strategy 
 	return topic + "-" + strings.ToLower(element)
 }
 
-// encodeWireFormat encodes a 5-byte Confluent magic envelope.
-func encodeWireFormat(schemaID int) []byte {
+// encodeWireFormat encodes a 5-byte Confluent magic envelope. The schema ID is
+// a big-endian uint32, so it must be in range; an out-of-range ID is an error
+// rather than a silently truncated cast.
+func encodeWireFormat(schemaID int) ([]byte, error) {
+	if schemaID < 0 || schemaID > math.MaxUint32 {
+		return nil, fmt.Errorf("SchemaRegistry: schema ID %d out of range for wire format (0..%d)", schemaID, math.MaxUint32)
+	}
 	buf := make([]byte, 5)
 	buf[0] = 0x00
-	binary.BigEndian.PutUint32(buf[1:], uint32(schemaID)) //nolint:gosec // schemaID is valid int32
-	return buf
+	binary.BigEndian.PutUint32(buf[1:], uint32(schemaID))
+	return buf, nil
+}
+
+// withWireFormat prepends the Confluent envelope when the schema carries a
+// registry-assigned ID; otherwise it returns the payload unchanged.
+func withWireFormat(schema *Schema, payload []byte) ([]byte, error) {
+	if schema == nil || schema.ID == 0 {
+		return payload, nil
+	}
+	envelope, err := encodeWireFormat(schema.ID)
+	if err != nil {
+		return nil, err
+	}
+	return append(envelope, payload...), nil
 }
 
 // decodeWireFormat decodes a 5-byte Confluent magic envelope and returns (schemaID, remainingBytes).
@@ -530,11 +551,7 @@ func (sr *SchemaRegistry) serialize(data any, schemaType string, schema *Schema)
 		if err != nil {
 			return nil, fmt.Errorf("SchemaRegistry: Avro encode failed: %w", err)
 		}
-		if schema.ID != 0 {
-			// Add wire format envelope
-			encoded = append(encodeWireFormat(schema.ID), encoded...)
-		}
-		return encoded, nil
+		return withWireFormat(schema, encoded)
 
 	case "JSON":
 		if schema == nil {
@@ -552,11 +569,7 @@ func (sr *SchemaRegistry) serialize(data any, schemaType string, schema *Schema)
 		if err != nil {
 			return nil, fmt.Errorf("SchemaRegistry: JSON encode failed: %w", err)
 		}
-		if schema.ID != 0 {
-			// Add wire format envelope
-			encoded = append(encodeWireFormat(schema.ID), encoded...)
-		}
-		return encoded, nil
+		return withWireFormat(schema, encoded)
 
 	default:
 		return nil, fmt.Errorf("SchemaRegistry: unsupported schema type: %s", schemaType)
