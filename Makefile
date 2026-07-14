@@ -57,7 +57,7 @@ broker-down: ## Stop and remove the local Kafka (incl. volumes)
 .PHONY: integration
 integration: ## Start a broker, run the integration tests, then tear it down
 	@$(MAKE) broker-up
-	@set -e; trap '$(MAKE) broker-down' EXIT; KAFKA_BROKER=localhost:9092 $(MAKE) it
+	@set -e; trap '$(MAKE) broker-down' EXIT; KAFKA_BROKER=localhost:9092 SCHEMA_REGISTRY_URL=http://localhost:8081 $(MAKE) it
 
 $(LINT_BASE): $(WORKFLOW)
 	curl -fsSL $(BASE_URL) -o $@
