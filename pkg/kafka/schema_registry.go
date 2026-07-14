@@ -3,7 +3,6 @@ package kafka
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -106,12 +105,14 @@ func NewSchemaRegistry(vu modules.VU, config *SchemaRegistryConfig) (*SchemaRegi
 	}
 
 	// Build HTTP client with TLS config. Timeout bounds every call so an
-	// unreachable registry fails instead of hanging.
+	// unreachable registry fails instead of hanging. The registry client gates
+	// TLS on the URL scheme (https), not EnableTLS, so any TLS material provided
+	// (minVersion, client cert/key, server CA, insecure-skip) is honored.
 	httpClient := &http.Client{Timeout: schemaRegistryTimeout}
 	if config.TLS != nil {
-		tlsConfig := &tls.Config{}
-		if config.TLS.InsecureSkipTLSVerify {
-			tlsConfig.InsecureSkipVerify = true
+		tlsConfig, err := tlsConfigFrom(config.TLS)
+		if err != nil {
+			return nil, fmt.Errorf("SchemaRegistry: %w", err)
 		}
 		httpClient.Transport = &http.Transport{TLSClientConfig: tlsConfig}
 	}

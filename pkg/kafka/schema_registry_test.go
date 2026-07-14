@@ -2,11 +2,34 @@ package kafka
 
 import (
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/grafana/sobek"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSchemaRegistryTLS(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	caPEM := pemStr("CERTIFICATE", srv.Certificate().Raw)
+
+	// Trusted via serverCaPem: connectivity check succeeds.
+	_, err := NewSchemaRegistry(nil, &SchemaRegistryConfig{URL: srv.URL, TLS: &TLSConfig{ServerCaPem: caPEM}})
+	require.NoError(t, err)
+
+	// Untrusted (no CA, verify on): fails.
+	_, err = NewSchemaRegistry(nil, &SchemaRegistryConfig{URL: srv.URL, TLS: &TLSConfig{}})
+	require.Error(t, err)
+
+	// insecureSkipTlsVerify: connects despite the untrusted cert.
+	_, err = NewSchemaRegistry(nil, &SchemaRegistryConfig{URL: srv.URL, TLS: &TLSConfig{InsecureSkipTLSVerify: true}})
+	require.NoError(t, err)
+}
 
 // Test wire format encoding/decoding (task 3.3)
 func TestWireFormatRoundTrip(t *testing.T) {
