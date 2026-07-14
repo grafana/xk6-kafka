@@ -221,17 +221,19 @@ func marshalRecord(m *ProduceMessage) *kgo.Record {
 	return record
 }
 
-// toBytes coerces a JS value to bytes: a string becomes its UTF-8 bytes, a
-// Uint8Array becomes its bytes, and anything else is formatted as a string.
+// toBytes coerces a JS value to bytes: a string becomes its UTF-8 bytes,
+// byte-like arrays / buffers keep their raw bytes, and anything else is
+// formatted as a string.
 func toBytes(v any) []byte {
 	switch x := v.(type) {
 	case nil:
 		return nil
 	case string:
 		return []byte(x)
-	case []byte:
-		return x
 	default:
+		if b, ok := coerceBytes(x); ok {
+			return b
+		}
 		return fmt.Appendf(nil, "%v", x)
 	}
 }
