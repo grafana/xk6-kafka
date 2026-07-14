@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -24,6 +25,13 @@ import (
 // schemaRegistryTimeout bounds every Schema Registry HTTP call so a slow or
 // unreachable registry cannot stall a VU (or init) indefinitely.
 const schemaRegistryTimeout = 60 * time.Second
+
+// errProtobufUnsupported is returned for SCHEMA_TYPE_PROTOBUF. Protobuf serdes
+// arrived in the community v2 surface (which is out of scope here); this
+// v1-compatible extension supports Avro and JSON only. The constant is kept so
+// scripts referencing it fail with a clear message rather than a ReferenceError.
+var errProtobufUnsupported = errors.New(
+	"SchemaRegistry: Protobuf serdes is not supported in v1 (Avro and JSON only)")
 
 // BasicAuth holds Schema Registry basic auth credentials.
 type BasicAuth struct {
@@ -617,6 +625,9 @@ func (sr *SchemaRegistry) serialize(data any, schemaType string, schema *Schema)
 		}
 		return withWireFormat(schema, encoded)
 
+	case schemaTypeProtobuf:
+		return nil, errProtobufUnsupported
+
 	default:
 		return nil, fmt.Errorf("SchemaRegistry: unsupported schema type: %s", schemaType)
 	}
@@ -719,6 +730,9 @@ func (sr *SchemaRegistry) deserialize(data []byte, schemaType string, schema *Sc
 			return nil, fmt.Errorf("SchemaRegistry: JSON validation failed: %w", err)
 		}
 		return result, nil
+
+	case schemaTypeProtobuf:
+		return nil, errProtobufUnsupported
 
 	default:
 		return nil, fmt.Errorf("SchemaRegistry: unsupported schema type: %s", schemaType)

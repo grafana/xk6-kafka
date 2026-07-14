@@ -883,10 +883,10 @@ export const SCHEMA_TYPE_JSON: "JSON";
 /**
  * Protocol Buffers schema.
  * @remarks
- * Covers the common single-message protobuf serdes flow. The extra protobuf
- * metadata from later community versions (`messageName`, `dependencies`,
- * `protobufFormat`, for multi-message or standalone schemas) is not part of
- * this v1-compatible surface yet.
+ * Not supported in v1: Protobuf serdes arrived in the community v2 surface,
+ * which is out of scope for this v1-compatible extension. The constant is
+ * exported for source compatibility, but `serialize`/`deserialize` throw for
+ * `PROTOBUF`. Use {@link SCHEMA_TYPE_AVRO} or {@link SCHEMA_TYPE_JSON}.
  */
 export const SCHEMA_TYPE_PROTOBUF: "PROTOBUF";
 /** Schema types used in identifying schema and data type in serdes. */

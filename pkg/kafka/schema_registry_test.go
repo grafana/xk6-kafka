@@ -67,6 +67,15 @@ func TestEncodeWireFormatOutOfRange(t *testing.T) {
 	}
 }
 
+func TestProtobufUnsupported(t *testing.T) {
+	t.Parallel()
+	sr := &SchemaRegistry{config: nil}
+	_, serErr := sr.serialize(map[string]any{"x": 1}, "PROTOBUF", &Schema{})
+	require.ErrorIs(t, serErr, errProtobufUnsupported)
+	_, desErr := sr.deserialize([]byte{1, 2, 3}, "PROTOBUF", &Schema{})
+	require.ErrorIs(t, desErr, errProtobufUnsupported)
+}
+
 func TestDecodeWireFormatErrors(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
