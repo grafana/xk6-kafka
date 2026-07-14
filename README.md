@@ -124,7 +124,6 @@ This extension aims for **familiarity, not a guarantee**: most community v1 scri
 
 The Schema Registry implementation focuses on the core serdes workflows and does not yet include:
 
-- **Return type**: `serialize()` returns bytes as a JavaScript Array instead of Uint8Array (type annotation in index.d.ts says Uint8Array; data is correct, only JS type differs). Workaround: cast or use directly with `writer.produce()`.
 - **TLS config**: only `insecureSkipTlsVerify` is implemented; `minVersion`, `clientCertPem`, `clientKeyPem`, `serverCaPem` are accepted but ignored. HTTPS registries requiring custom CA or client certs will fail.
 - **Caching**: schemas are fetched from the registry on each call (no client-side cache). For bulk produce/consume operations, fetch schemas once in init and reuse them.
 - **Complex schema references**: multi-schema compositions (imports for Protobuf, `$ref` for JSON Schema) are not supported.
