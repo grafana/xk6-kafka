@@ -32,7 +32,7 @@ services:
       retries: 12
 
   schema-registry:
-    image: confluentinc/cp-schema-registry:7.6.0
+    image: confluentinc/cp-schema-registry:7.9.8@sha256:e66c72710f6d4e41db4daf17693909023a13ddfc7d3552db436ea1ac1bd694e9
     ports:
       - "8081:8081"
     environment:
