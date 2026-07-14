@@ -29,12 +29,33 @@ sites, which already run on the VU goroutine.
 
 - **Hybrid collection: hooks accumulate, call sites emit.** franz-go invokes
   hooks from its own internal goroutines, where the VU context and
-  `state.Samples` are not safe to touch. So hooks only update the collector's
-  atomic counters/accumulators (bytes written/read, dials, dial/e2e durations,
-  batch sizes, retries, rebalances). The Writer/Reader flush these into
-  `metrics.Sample`s at the end of each `produce` / `consume` call — on the VU
-  goroutine, where `state.Samples` and tags are valid. *Alternative:* push
-  samples directly from hooks — rejected: wrong goroutine, no VU state, racy.
+  `state.Samples` are not safe to touch. So hooks only update collector state
+  under a mutex/atomics; the Writer/Reader drain it into `metrics.Sample`s at
+  the end of each `produce` / `consume` call — on the VU goroutine, where
+  `state.Samples` and tags are valid. *Alternative:* push samples directly from
+  hooks — rejected: wrong goroutine, no VU state, racy.
+
+- **Counters emit deltas; trends emit buffered observations.** k6 **sums**
+  counter samples, so a hook-sourced counter (monotonic atomic total) is flushed
+  as `total - lastFlushed` (a delta), and `lastFlushed` is advanced — summation
+  then reconstructs the true total. Flushing running totals would double-count
+  every subsequent call, so it is prohibited. Trend metrics need per-observation
+  values, so hooks that carry a value (dial/e2e/batch durations, batch/fetch
+  sizes and bytes) append each observation to a small mutex-guarded buffer that
+  the flush drains (the buffer only spans one produce/consume call, so it stays
+  bounded). *Alternative:* emit a single aggregated trend value per flush —
+  rejected: loses the distribution k6 trends are for.
+
+- **Per-topic attribution, not a single tag.** A `produce` call can target
+  multiple topics (`ProduceMessage.Topic` per message) and a group `consume`
+  can span `groupTopics`. Message-level metrics (`*_message_count/bytes`, reader
+  `lag`/`offset`) are therefore bucketed **by topic** at the call site (each
+  record carries its topic) and emitted as one sample set per topic. Batch/fetch
+  hooks (`HookProduceBatchWritten`, `HookFetchBatchRead`) receive the topic from
+  franz-go, so those trends are bucketed per topic too. Connection-level
+  (`*_dial_*`) and group-level (`rebalance`) metrics have no meaningful single
+  topic and are emitted **untagged**. *Alternative:* one `topic` tag per call —
+  rejected: misattributes mixed-topic batches (flagged in review).
 
 - **Message counts/bytes and lag come from the call site, not hooks.**
   `produce` knows the records and their serialized sizes; `consume` knows each

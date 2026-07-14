@@ -53,4 +53,6 @@ deferred by the producer and consumer changes; this change delivers them.
 - **Dependencies**: none new — uses `go.k6.io/k6/v2/metrics` (already present)
   and franz-go hooks.
 - **Contract**: none (`index.d.ts` unchanged).
-- **Docs**: compatibility matrix lists the supported and omitted metrics.
+- **Docs**: a README "Metrics" section (self-contained in this change) lists the
+  supported and omitted metrics; the broader compatibility matrix (#70) can
+  reference it later.
