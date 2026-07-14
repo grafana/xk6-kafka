@@ -13,11 +13,17 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/grafana/sobek"
 	"github.com/hamba/avro/v2"
+	"go.k6.io/k6/v2/js/modules"
 )
+
+// schemaRegistryTimeout bounds every Schema Registry HTTP call so a slow or
+// unreachable registry cannot stall a VU (or init) indefinitely.
+const schemaRegistryTimeout = 60 * time.Second
 
 // BasicAuth holds Schema Registry basic auth credentials.
 type BasicAuth struct {
@@ -57,23 +63,43 @@ type SchemaRegistryConfig struct {
 
 // SchemaRegistry is a client for Schema Registry and serdes operations.
 type SchemaRegistry struct {
+	vu     modules.VU
 	config *SchemaRegistryConfig
 	client *http.Client
 }
 
+// reqContext returns the VU context when one is available, so registry calls
+// cancel when the test stops. It falls back to Background in the init context
+// (or when constructed without a VU, e.g. unit tests). The client's Timeout
+// bounds the call either way.
+func (sr *SchemaRegistry) reqContext() context.Context {
+	return vuContext(sr.vu)
+}
+
+// vuContext resolves the usable context for a (possibly nil) VU.
+func vuContext(vu modules.VU) context.Context {
+	if vu != nil {
+		if ctx := vu.Context(); ctx != nil {
+			return ctx
+		}
+	}
+	return context.Background()
+}
+
 // NewSchemaRegistry creates a new SchemaRegistry client.
-func NewSchemaRegistry(config *SchemaRegistryConfig) (*SchemaRegistry, error) {
+func NewSchemaRegistry(vu modules.VU, config *SchemaRegistryConfig) (*SchemaRegistry, error) {
 	if config == nil {
 		// Standalone mode: no registry
-		return &SchemaRegistry{config: nil}, nil
+		return &SchemaRegistry{vu: vu, config: nil}, nil
 	}
 
 	if config.URL == "" {
 		return nil, fmt.Errorf("SchemaRegistry: url is required")
 	}
 
-	// Build HTTP client with TLS config
-	httpClient := &http.Client{}
+	// Build HTTP client with TLS config. Timeout bounds every call so an
+	// unreachable registry fails instead of hanging.
+	httpClient := &http.Client{Timeout: schemaRegistryTimeout}
 	if config.TLS != nil {
 		tlsConfig := &tls.Config{}
 		if config.TLS.InsecureSkipTLSVerify {
@@ -83,7 +109,7 @@ func NewSchemaRegistry(config *SchemaRegistryConfig) (*SchemaRegistry, error) {
 	}
 
 	// Validate connectivity with /config endpoint (requires auth)
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, config.URL+"/config", nil)
+	req, err := http.NewRequestWithContext(vuContext(vu), http.MethodGet, config.URL+"/config", nil)
 	if err != nil {
 		return nil, fmt.Errorf("SchemaRegistry: failed to create request: %w", err)
 	}
@@ -101,6 +127,7 @@ func NewSchemaRegistry(config *SchemaRegistryConfig) (*SchemaRegistry, error) {
 	}
 
 	sr := &SchemaRegistry{
+		vu:     vu,
 		config: config,
 		client: httpClient,
 	}
@@ -134,7 +161,7 @@ func (sr *SchemaRegistry) getSchema(subject string, version *int) (*Schema, erro
 		path = fmt.Sprintf("/subjects/%s/versions/%d", subject, *version)
 	}
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, sr.config.URL+path, nil)
+	req, err := http.NewRequestWithContext(sr.reqContext(), http.MethodGet, sr.config.URL+path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("SchemaRegistry: failed to create request: %w", err)
 	}
@@ -190,7 +217,7 @@ func (sr *SchemaRegistry) createSchema(subject string, schemaStr string, schemaT
 	}
 
 	url := sr.config.URL + "/subjects/" + subject + "/versions"
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(sr.reqContext(), http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("SchemaRegistry: failed to create request: %w", err)
 	}
