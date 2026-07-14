@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"net/http"
 	"reflect"
@@ -365,29 +366,31 @@ func coerceByte(v reflect.Value) (byte, bool) {
 	}
 }
 
+func normalizeAvroRecord(s *avro.RecordSchema, data any) (any, error) {
+	record, ok := data.(map[string]any)
+	if !ok {
+		return data, nil
+	}
+	out := make(map[string]any, len(record))
+	maps.Copy(out, record)
+	for _, field := range s.Fields() {
+		value, ok := record[field.Name()]
+		if !ok {
+			continue
+		}
+		normalized, err := normalizeAvroValue(field.Type(), value)
+		if err != nil {
+			return nil, err
+		}
+		out[field.Name()] = normalized
+	}
+	return out, nil
+}
+
 func normalizeAvroValue(schema avro.Schema, data any) (any, error) {
 	switch s := schema.(type) {
 	case *avro.RecordSchema:
-		record, ok := data.(map[string]any)
-		if !ok {
-			return data, nil
-		}
-		out := make(map[string]any, len(record))
-		for k, v := range record {
-			out[k] = v
-		}
-		for _, field := range s.Fields() {
-			value, ok := record[field.Name()]
-			if !ok {
-				continue
-			}
-			normalized, err := normalizeAvroValue(field.Type(), value)
-			if err != nil {
-				return nil, err
-			}
-			out[field.Name()] = normalized
-		}
-		return out, nil
+		return normalizeAvroRecord(s, data)
 	case *avro.ArraySchema:
 		rv := reflect.ValueOf(data)
 		if !rv.IsValid() || (rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array) {
@@ -418,7 +421,7 @@ func normalizeAvroValue(schema avro.Schema, data any) (any, error) {
 		return out, nil
 	case *avro.UnionSchema:
 		if data == nil {
-			return nil, nil
+			return data, nil
 		}
 		for _, branch := range s.Types() {
 			if branch.Type() == avro.Null {
@@ -456,6 +459,10 @@ func normalizeAvroPrimitive(typ avro.Type, data any) any {
 		if b, ok := coerceBytes(data); ok {
 			return b
 		}
+	case avro.String, avro.Boolean, avro.Null:
+		// Primitives returned as-is
+	case avro.Record, avro.Enum, avro.Array, avro.Map, avro.Union, avro.Fixed, avro.Error, avro.Ref:
+		// Complex types handled by caller
 	}
 	return data
 }
