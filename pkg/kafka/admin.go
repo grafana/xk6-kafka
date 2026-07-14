@@ -6,7 +6,7 @@ import (
 	"math"
 
 	"github.com/twmb/franz-go/pkg/kerr"
-	"github.com/twmb/franz-go/pkg/kmsg"
+	"github.com/twmb/franz-go/pkg/kmsg/v2"
 )
 
 // defaultPartitions and defaultReplicationFactor are used when numPartitions /
