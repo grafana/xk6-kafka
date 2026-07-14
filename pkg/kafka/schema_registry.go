@@ -16,7 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/grafana/sobek"
-	"github.com/hamba/avro"
+	"github.com/hamba/avro/v2"
 )
 
 // BasicAuth holds Schema Registry basic auth credentials.
