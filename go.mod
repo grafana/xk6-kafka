@@ -11,7 +11,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/twmb/franz-go v1.21.5
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1
-	go.k6.io/k6/v2 v2.0.0
+	go.k6.io/k6/v2 v2.1.0
 )
 
 require (
