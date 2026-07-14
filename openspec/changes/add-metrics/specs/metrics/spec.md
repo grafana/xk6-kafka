@@ -78,6 +78,13 @@ A `Writer` SHALL emit its metrics to the VU sample buffer at the end of each
   `kafka_writer_message_bytes` by the total serialized key+value bytes,
   attributed per topic
 
+#### Scenario: Default-topic messages attributed to the writer's topic
+
+- **WHEN** `writer.produce` sends a message with no explicit `topic` and the
+  writer was configured with a default `topic`
+- **THEN** that message's metrics are attributed to the writer's default topic,
+  not to an empty topic
+
 #### Scenario: Produce failure records an error
 
 - **WHEN** a `writer.produce` call fails
@@ -111,6 +118,21 @@ A `Reader` SHALL emit its metrics to the VU sample buffer at the end of each
 
 - **WHEN** a `reader.consume` call times out before reaching its limit
 - **THEN** `kafka_reader_timeouts_count` increases
+
+### Requirement: Pending metrics are flushed on close
+
+`Writer.close` and `Reader.close` SHALL flush any metrics accumulated since the
+last `produce` / `consume` before closing the underlying client, so events that
+occur after the final call — late dials, in-flight fetch completions, retries,
+a final rebalance — are not lost. This flush SHALL be a no-op when no VU state
+is available.
+
+#### Scenario: Close flushes late hook events
+
+- **WHEN** dial, fetch, retry, or rebalance activity is recorded after the last
+  `produce` / `consume` call, and `close` is then called in a VU context
+- **THEN** the corresponding metric deltas and buffered trend values are emitted
+  before the client is closed
 
 ### Requirement: Omitted community metrics are documented, not emitted
 

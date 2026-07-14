@@ -57,17 +57,30 @@ sites, which already run on the VU goroutine.
   topic and are emitted **untagged**. *Alternative:* one `topic` tag per call —
   rejected: misattributes mixed-topic batches (flagged in review).
 
+  The Writer retains its configured default topic (`WriterConfig.Topic`) as a
+  field, because `marshalRecord` leaves `record.Topic` empty when the default
+  applies. A produced message with no explicit `Topic` is attributed to that
+  default; one with an explicit `Topic` to its own.
+
+- **Flush on close, not only on produce/consume.** Hooks accumulate between
+  calls, so events after the last `produce`/`consume` (late dials, in-flight
+  fetch completions, retries, a final rebalance) would be lost if only those
+  calls flush. `Writer.close` and `Reader.close` therefore drain the collector
+  before closing the client. Close runs in teardown (VU context present), and
+  the flush is a no-op when no VU state is available, so it is safe.
+
 - **Message counts/bytes and lag come from the call site, not hooks.**
   `produce` knows the records and their serialized sizes; `consume` knows each
   record's offset and the partition high watermark, so
   `kafka_reader_lag = max(0, highWatermark - offset - 1)` is computed at decode.
   This avoids depending on hook batch granularity for the most-used metrics.
 
-- **One `metricsCollector` type**, constructed from the k6 metrics registry,
-  holding the registered `*metrics.Metric` handles plus atomic accumulators. It
-  exposes `writerHooks()` / `readerHooks()` (the `kgo.Hook` set) added in
-  `clientOptions`, and `flushProduce(...)` / `flushConsume(...)` called by
-  Writer/Reader. Registry handles are created once per module instance.
+- **One `metricsCollector` type**, constructed from the k6 metrics registry
+  (`NewMetric`/`MustNewMetric`), holding the registered `*metrics.Metric`
+  handles plus atomic accumulators and trend buffers. It exposes
+  `writerHooks()` / `readerHooks()` (the `kgo.Hook` set) added in
+  `clientOptions`, per-call flush entry points for Writer/Reader, and a
+  close-time drain. Registry handles are created once per module instance.
 
 - **Nil-VU safety.** Flushing checks `vu.State()`; when absent (init context) it
   skips emission rather than panicking, consistent with the produce/consume VU
@@ -89,9 +102,11 @@ sites, which already run on the VU goroutine.
 - **Per-VU vs shared client.** Each VU builds its own client and collector, so
   counters are per-VU; k6 aggregates across VUs in the summary, matching how
   community metrics behave. → No shared state needed.
-- **Metric registration collisions.** Registering the same metric name twice on
-  the k6 registry must reuse the existing handle. → Use the registry's
-  get-or-create (`registry.GetOrNew` semantics), not blind `NewMetric`.
+- **Metric registration collisions.** k6's `Registry.NewMetric(name, type,
+  valueType)` already returns the existing metric when the name and type match
+  (and errors on a type conflict); `MustNewMetric` is the panic-on-conflict
+  variant. → Register with `NewMetric`/`MustNewMetric` and rely on that reuse;
+  there is no `GetOrNew` in the k6 registry API.
 
 ## Open Questions
 

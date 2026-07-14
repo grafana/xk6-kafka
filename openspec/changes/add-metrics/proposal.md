@@ -25,8 +25,8 @@ deferred by the producer and consumer changes; this change delivers them.
   `kafka_reader_timeouts_count`.
 - Metrics are collected via franz-go client hooks (`kgo.WithHooks`) plus
   counting at produce/consume, registered on the k6 metrics registry, and
-  pushed to the VU sample buffer with the `topic` (and, where relevant, group)
-  tag.
+  pushed to the VU sample buffer. Topic-scoped metrics carry a `topic` tag;
+  connection- and group-level metrics are untagged (no `group` tag).
 - Community metrics that derive from `segmentio/kafka-go` stats and have no
   franz-go equivalent (`kafka_reader_queue_length`,
   `kafka_reader_queue_capacity`, and config-echo gauges) are **not** emitted and
