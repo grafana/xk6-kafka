@@ -6,7 +6,7 @@ toolchain go1.25.12
 
 require (
 	github.com/grafana/sobek v0.0.0-20260429085637-a66d4790012b
-	github.com/hamba/avro v1.8.0
+	github.com/hamba/avro/v2 v2.13.0
 	github.com/pavlo-v-chernykh/keystore-go/v4 v4.5.0
 	github.com/stretchr/testify v1.11.1
 	github.com/twmb/franz-go v1.21.3
@@ -32,6 +32,7 @@ require (
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
+	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mstoykov/atlas v0.0.0-20220811071828-388f114305dd // indirect
