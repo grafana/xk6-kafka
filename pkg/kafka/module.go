@@ -147,7 +147,7 @@ func (m *Module) newSchemaRegistry(call sobek.ConstructorCall) *sobek.Object {
 		cfg = &c
 	}
 
-	sr, err := NewSchemaRegistry(cfg)
+	sr, err := NewSchemaRegistry(m.vu, cfg)
 	if err != nil {
 		common.Throw(rt, err)
 	}

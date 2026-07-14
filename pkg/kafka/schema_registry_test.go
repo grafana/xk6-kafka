@@ -38,6 +38,15 @@ func TestWireFormatRoundTrip(t *testing.T) {
 	}
 }
 
+func TestReqContextNilVU(t *testing.T) {
+	t.Parallel()
+	// Standalone mode / unit tests construct without a VU; reqContext must
+	// still return a usable (non-nil) context instead of panicking.
+	sr := &SchemaRegistry{config: nil}
+	require.NotNil(t, sr.reqContext())
+	require.NotNil(t, vuContext(nil))
+}
+
 func TestEncodeWireFormatOutOfRange(t *testing.T) {
 	t.Parallel()
 	for _, id := range []int{-1, math.MaxUint32 + 1} {
