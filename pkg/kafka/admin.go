@@ -18,23 +18,23 @@ const (
 
 // TopicConfig configures a topic to create (see index.d.ts TopicConfig).
 type TopicConfig struct {
-	Topic              string              `json:"topic"`
-	NumPartitions      int                 `json:"numPartitions"`
-	ReplicationFactor  int                 `json:"replicationFactor"`
-	ReplicaAssignments []ReplicaAssignment `json:"replicaAssignments"`
-	ConfigEntries      []ConfigEntry       `json:"configEntries"`
+	Topic              string              `js:"topic"`
+	NumPartitions      int                 `js:"numPartitions"`
+	ReplicationFactor  int                 `js:"replicationFactor"`
+	ReplicaAssignments []ReplicaAssignment `js:"replicaAssignments"`
+	ConfigEntries      []ConfigEntry       `js:"configEntries"`
 }
 
 // ReplicaAssignment maps a partition to the broker IDs hosting its replicas.
 type ReplicaAssignment struct {
-	Partition int32   `json:"partition"`
-	Replicas  []int32 `json:"replicas"`
+	Partition int32   `js:"partition"`
+	Replicas  []int32 `js:"replicas"`
 }
 
 // ConfigEntry is a single topic-level configuration entry.
 type ConfigEntry struct {
-	ConfigName  string `json:"configName"`
-	ConfigValue string `json:"configValue"`
+	ConfigName  string `js:"configName"`
+	ConfigValue string `js:"configValue"`
 }
 
 // kmsgReplicaAssignment aliases the verbose protocol type for readability.

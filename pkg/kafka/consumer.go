@@ -15,48 +15,51 @@ import (
 // (franz-go's fetch-wait default).
 const defaultMaxWait = 5 * time.Second
 
+// commitTimeout bounds the offset commit performed when a group consumer closes.
+const commitTimeout = 10 * time.Second
+
 // ReaderConfig is the consumer configuration (see index.d.ts ReaderConfig).
 // Accepted-but-ignored fields (queueCapacity, readLagInterval, …) are omitted:
 // unknown JS keys are dropped during decoding.
 type ReaderConfig struct {
-	Brokers           []string    `json:"brokers"`
-	GroupID           string      `json:"groupID"`
-	GroupTopics       []string    `json:"groupTopics"`
-	Topic             string      `json:"topic"`
-	Partition         int32       `json:"partition"`
-	MinBytes          int         `json:"minBytes"`
-	MaxBytes          int         `json:"maxBytes"`
-	MaxWait           string      `json:"maxWait"`
-	GroupBalancers    []string    `json:"groupBalancers"`
-	HeartbeatInterval int64       `json:"heartbeatInterval"`
-	CommitInterval    int64       `json:"commitInterval"`
-	SessionTimeout    int64       `json:"sessionTimeout"`
-	RebalanceTimeout  int64       `json:"rebalanceTimeout"`
-	StartOffset       string      `json:"startOffset"`
-	Offset            *int64      `json:"offset"`
-	MaxAttempts       *int        `json:"maxAttempts"`
-	IsolationLevel    string      `json:"isolationLevel"`
-	SASL              *SASLConfig `json:"sasl"`
-	TLS               *TLSConfig  `json:"tls"`
+	Brokers           []string    `js:"brokers"`
+	GroupID           string      `js:"groupID"`
+	GroupTopics       []string    `js:"groupTopics"`
+	Topic             string      `js:"topic"`
+	Partition         int32       `js:"partition"`
+	MinBytes          int         `js:"minBytes"`
+	MaxBytes          int         `js:"maxBytes"`
+	MaxWait           string      `js:"maxWait"`
+	GroupBalancers    []string    `js:"groupBalancers"`
+	HeartbeatInterval int64       `js:"heartbeatInterval"`
+	CommitInterval    int64       `js:"commitInterval"`
+	SessionTimeout    int64       `js:"sessionTimeout"`
+	RebalanceTimeout  int64       `js:"rebalanceTimeout"`
+	StartOffset       string      `js:"startOffset"`
+	Offset            *int64      `js:"offset"`
+	MaxAttempts       *int        `js:"maxAttempts"`
+	IsolationLevel    string      `js:"isolationLevel"`
+	SASL              *SASLConfig `js:"sasl"`
+	TLS               *TLSConfig  `js:"tls"`
 }
 
 // ConsumeConfig is the argument to consume.
 type ConsumeConfig struct {
-	Limit         int  `json:"limit"`
-	NanoPrecision bool `json:"nanoPrecision"`
-	ExpectTimeout bool `json:"expectTimeout"`
+	Limit         int  `js:"limit"`
+	NanoPrecision bool `js:"nanoPrecision"`
+	ExpectTimeout bool `js:"expectTimeout"`
 }
 
 // ConsumedMessage is a message returned by consume (see index.d.ts Message).
 type ConsumedMessage struct {
-	Topic         string         `json:"topic"`
-	Partition     int            `json:"partition"`
-	Offset        int64          `json:"offset"`
-	HighWaterMark int64          `json:"highWaterMark"`
-	Key           []byte         `json:"key"`
-	Value         []byte         `json:"value"`
-	Headers       map[string]any `json:"headers"`
-	Time          string         `json:"time"`
+	Topic         string         `js:"topic"`
+	Partition     int            `js:"partition"`
+	Offset        int64          `js:"offset"`
+	HighWaterMark int64          `js:"highWaterMark"`
+	Key           []byte         `js:"key"`
+	Value         []byte         `js:"value"`
+	Headers       map[string]any `js:"headers"`
+	Time          string         `js:"time"`
 }
 
 // Reader reads messages from Kafka.
@@ -65,6 +68,7 @@ type Reader struct {
 	client    *kgo.Client
 	maxWait   time.Duration
 	collector *metricsCollector
+	group     bool // true for a consumer-group reader (commits offsets on close)
 }
 
 // openReader builds a consumer client (group or direct) from the config.
@@ -102,7 +106,7 @@ func openReader(vu modules.VU, cfg ReaderConfig, collector *metricsCollector) (*
 	if err != nil {
 		return nil, fmt.Errorf("creating consumer: %w", err)
 	}
-	return &Reader{vu: vu, client: client, maxWait: maxWait, collector: collector}, nil
+	return &Reader{vu: vu, client: client, maxWait: maxWait, collector: collector, group: cfg.GroupID != ""}, nil
 }
 
 // readerOptions assembles the franz-go options for a consumer.
@@ -312,11 +316,24 @@ func (r *Reader) Consume(config ConsumeConfig) ([]ConsumedMessage, error) {
 // Close closes the underlying client, releasing connections (and leaving the
 // group for a group consumer).
 func (r *Reader) Close() {
-	if r.client != nil {
-		r.collector.flushClose(r.vu)
-		r.client.Close()
-		r.client = nil
+	if r.client == nil {
+		return
 	}
+	r.collector.flushClose(r.vu)
+	if r.group {
+		// Commit consumed offsets so a later member of the same group resumes
+		// after them instead of reprocessing. franz-go's periodic autocommit may
+		// not have fired for a short-lived consumer, so commit explicitly.
+		base := context.Background()
+		if r.vu != nil {
+			base = r.vu.Context()
+		}
+		ctx, cancel := context.WithTimeout(base, commitTimeout)
+		_ = r.client.CommitUncommittedOffsets(ctx)
+		cancel()
+	}
+	r.client.Close()
+	r.client = nil
 }
 
 // readerLag is the consumer lag for a message: messages remaining after this

@@ -14,36 +14,36 @@ import (
 // WriterConfig is the producer configuration (see index.d.ts WriterConfig).
 // Fields where 0 is a meaningful value use pointers to distinguish "unset".
 type WriterConfig struct {
-	Brokers         []string    `json:"brokers"`
-	Topic           string      `json:"topic"`
-	AutoCreateTopic bool        `json:"autoCreateTopic"`
-	Balancer        any         `json:"balancer"` // string (named) or function (custom, not honored)
-	MaxAttempts     *int        `json:"maxAttempts"`
-	BatchSize       int         `json:"batchSize"` // accepted-ignored
-	BatchBytes      int         `json:"batchBytes"`
-	BatchTimeout    int64       `json:"batchTimeout"` // nanoseconds
-	ReadTimeout     int64       `json:"readTimeout"`  // accepted-ignored
-	RequiredAcks    *int        `json:"requiredAcks"`
-	WriteTimeout    int64       `json:"writeTimeout"` // nanoseconds
-	Compression     string      `json:"compression"`
-	SASL            *SASLConfig `json:"sasl"`
-	TLS             *TLSConfig  `json:"tls"`
-	ConnectLogger   bool        `json:"connectLogger"` // accepted-ignored
+	Brokers         []string    `js:"brokers"`
+	Topic           string      `js:"topic"`
+	AutoCreateTopic bool        `js:"autoCreateTopic"`
+	Balancer        any         `js:"balancer"` // string (named) or function (custom, not honored)
+	MaxAttempts     *int        `js:"maxAttempts"`
+	BatchSize       int         `js:"batchSize"` // accepted-ignored
+	BatchBytes      int         `js:"batchBytes"`
+	BatchTimeout    int64       `js:"batchTimeout"` // nanoseconds
+	ReadTimeout     int64       `js:"readTimeout"`  // accepted-ignored
+	RequiredAcks    *int        `js:"requiredAcks"`
+	WriteTimeout    int64       `js:"writeTimeout"` // nanoseconds
+	Compression     string      `js:"compression"`
+	SASL            *SASLConfig `js:"sasl"`
+	TLS             *TLSConfig  `js:"tls"`
+	ConnectLogger   bool        `js:"connectLogger"` // accepted-ignored
 }
 
 // ProduceMessage is a message to produce (see index.d.ts Message). `key` and
 // `value` accept a string or a Uint8Array; `headers` is a plain object.
 type ProduceMessage struct {
-	Topic   string         `json:"topic"`
-	Key     any            `json:"key"`
-	Value   any            `json:"value"`
-	Headers map[string]any `json:"headers"`
-	Time    time.Time      `json:"time"`
+	Topic   string         `js:"topic"`
+	Key     any            `js:"key"`
+	Value   any            `js:"value"`
+	Headers map[string]any `js:"headers"`
+	Time    time.Time      `js:"time"`
 }
 
 // ProduceConfig is the argument to produce.
 type ProduceConfig struct {
-	Messages []ProduceMessage `json:"messages"`
+	Messages []ProduceMessage `js:"messages"`
 }
 
 // Writer produces messages to Kafka.
