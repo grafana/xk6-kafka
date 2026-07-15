@@ -965,7 +965,10 @@ export interface Schema {
   schema?: string;
   /** Which schema format this is. Required when registering. */
   schemaType?: SCHEMA_TYPES;
-  /** Keep a local copy of this schema so repeated use skips the network. */
+  /**
+   * Accepted but ignored in v1. Caching is controlled at the client level via
+   * `SchemaRegistryConfig.enableCaching`, not per schema.
+   */
   enableCaching?: boolean;
   /** Numeric ID assigned by Schema Registry. Set for you when the schema is registered or loaded. */
   id?: number;
