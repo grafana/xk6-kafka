@@ -61,6 +61,7 @@ type SubjectNameConfig struct {
 	Topic               string `js:"topic"`
 	Element             string `js:"element"`
 	SubjectNameStrategy string `js:"subjectNameStrategy"`
+	Schema              string `js:"schema"`
 }
 
 // SchemaRegistryConfig holds Schema Registry connection settings.
@@ -363,19 +364,50 @@ func (sr *SchemaRegistry) GetSubjectName(config *SubjectNameConfig) (string, err
 	if config.Element == "" {
 		return "", fmt.Errorf("SchemaRegistry: GetSubjectName requires element")
 	}
-	return sr.getSubjectName(config.Topic, config.Element, config.SubjectNameStrategy), nil
+	return sr.getSubjectName(config.Topic, config.Element, config.SubjectNameStrategy, config.Schema)
 }
 
 // getSubjectName returns the subject name for a topic and element using TopicNameStrategy.
-func (sr *SchemaRegistry) getSubjectName(topic string, element string, strategy string) string {
-	// Only TopicNameStrategy supported in v1
-	if strategy == "TopicNameStrategy" {
-		if element == "key" {
-			return topic + "-key"
+func (sr *SchemaRegistry) getSubjectName(topic, element, strategy, schema string) (string, error) {
+	switch strategy {
+	case "", topicNameStrategy:
+		// TopicNameStrategy (also the default): {topic}-{element}. Ignores schema.
+		return topic + "-" + strings.ToLower(element), nil
+	case recordNameStrategy:
+		name, err := sr.recordFullName(schema)
+		if err != nil {
+			return "", err
 		}
-		return topic + "-value"
+		return name, nil
+	case topicRecordNameStrategy:
+		name, err := sr.recordFullName(schema)
+		if err != nil {
+			return "", err
+		}
+		return topic + "-" + name, nil
+	default:
+		return "", fmt.Errorf("SchemaRegistry: unknown subjectNameStrategy %q", strategy)
 	}
-	return topic + "-" + strings.ToLower(element)
+}
+
+// recordFullName returns the fully-qualified name of an Avro named schema
+// (record/enum/fixed) parsed from schemaStr, for the record-name strategies.
+// It errors on an empty, unparseable, or non-named schema rather than guess;
+// JSON Schema and Protobuf record naming are not supported in v1.
+func (sr *SchemaRegistry) recordFullName(schemaStr string) (string, error) {
+	if schemaStr == "" {
+		return "", fmt.Errorf("SchemaRegistry: record-name strategy requires a schema")
+	}
+	parsed, err := sr.parsedAvro(schemaStr)
+	if err != nil {
+		return "", fmt.Errorf("SchemaRegistry: record-name strategy requires a parseable Avro schema: %w", err)
+	}
+	named, ok := parsed.(avro.NamedSchema)
+	if !ok {
+		return "", fmt.Errorf(
+			"SchemaRegistry: record-name strategy requires a named Avro schema (record/enum/fixed), got %q", parsed.Type())
+	}
+	return named.FullName(), nil
 }
 
 // encodeWireFormat encodes a 5-byte Confluent magic envelope. The schema ID is
