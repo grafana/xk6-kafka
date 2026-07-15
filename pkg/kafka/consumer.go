@@ -61,13 +61,14 @@ type ConsumedMessage struct {
 
 // Reader reads messages from Kafka.
 type Reader struct {
-	vu      modules.VU
-	client  *kgo.Client
-	maxWait time.Duration
+	vu        modules.VU
+	client    *kgo.Client
+	maxWait   time.Duration
+	collector *metricsCollector
 }
 
 // openReader builds a consumer client (group or direct) from the config.
-func openReader(vu modules.VU, cfg ReaderConfig) (*Reader, error) {
+func openReader(vu modules.VU, cfg ReaderConfig, collector *metricsCollector) (*Reader, error) {
 	if len(cfg.Brokers) == 0 {
 		return nil, errors.New("at least one broker is required")
 	}
@@ -93,7 +94,7 @@ func openReader(vu modules.VU, cfg ReaderConfig) (*Reader, error) {
 		maxWait = d
 	}
 
-	opts, err := readerOptions(cfg, maxWait)
+	opts, err := readerOptions(cfg, maxWait, collector)
 	if err != nil {
 		return nil, err
 	}
@@ -101,14 +102,17 @@ func openReader(vu modules.VU, cfg ReaderConfig) (*Reader, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating consumer: %w", err)
 	}
-	return &Reader{vu: vu, client: client, maxWait: maxWait}, nil
+	return &Reader{vu: vu, client: client, maxWait: maxWait, collector: collector}, nil
 }
 
 // readerOptions assembles the franz-go options for a consumer.
-func readerOptions(cfg ReaderConfig, maxWait time.Duration) ([]kgo.Opt, error) {
+func readerOptions(cfg ReaderConfig, maxWait time.Duration, collector *metricsCollector) ([]kgo.Opt, error) {
 	opts, err := clientOptions(cfg.Brokers, cfg.SASL, cfg.TLS)
 	if err != nil {
 		return nil, err
+	}
+	if collector != nil {
+		opts = append(opts, kgo.WithHooks(collector.hooks()...))
 	}
 
 	if cfg.MinBytes > 0 && cfg.MinBytes <= math.MaxInt32 {
@@ -246,11 +250,31 @@ func (r *Reader) Consume(config ConsumeConfig) ([]ConsumedMessage, error) {
 	defer cancel()
 
 	messages := make([]ConsumedMessage, 0, config.Limit)
+	msgCount := make(map[string]int64)
+	msgBytes := make(map[string]int64)
+	var lags, offsets []perTopicTrend
+	// flush emits reader metrics. Message counts/bytes/lag/offset are reported
+	// only when the call actually returns messages (withMessages); on error,
+	// cancellation, or a non-expected timeout the call returns no messages, so
+	// only the error/timeout counters (and drained hook metrics) are emitted.
+	flush := func(withMessages, fetchErr, timedOut bool) {
+		mc, mb, lg, of := msgCount, msgBytes, lags, offsets
+		if !withMessages {
+			mc, mb, lg, of = nil, nil, nil, nil
+		}
+		r.collector.flushConsume(r.vu, mc, mb, lg, of, fetchErr, timedOut)
+	}
+
 	for len(messages) < config.Limit {
 		fetches := r.client.PollRecords(ctx, config.Limit-len(messages))
 		fetches.EachPartition(func(p kgo.FetchTopicPartition) {
 			for _, record := range p.Records {
 				messages = append(messages, decodeRecord(record, p.HighWatermark, config.NanoPrecision))
+				msgCount[record.Topic]++
+				msgBytes[record.Topic] += int64(len(record.Key) + len(record.Value))
+				lag := readerLag(p.HighWatermark, record.Offset)
+				lags = append(lags, perTopicTrend{record.Topic, float64(lag)})
+				offsets = append(offsets, perTopicTrend{record.Topic, float64(record.Offset)})
 			}
 		})
 		if ctx.Err() != nil {
@@ -259,6 +283,7 @@ func (r *Reader) Consume(config ConsumeConfig) ([]ConsumedMessage, error) {
 		if errs := fetches.Errors(); len(errs) > 0 {
 			for _, e := range errs {
 				if !errors.Is(e.Err, context.DeadlineExceeded) && !errors.Is(e.Err, context.Canceled) {
+					flush(false, true, false) // fetch error: no messages returned
 					return nil, fmt.Errorf("consuming from %s: %w", e.Topic, e.Err)
 				}
 			}
@@ -270,13 +295,17 @@ func (r *Reader) Consume(config ConsumeConfig) ([]ConsumedMessage, error) {
 		// A canceled parent (VU stopping) is not a timeout: surface it as
 		// cancellation regardless of expectTimeout.
 		if parentErr := r.vu.Context().Err(); parentErr != nil {
+			flush(false, false, false) // cancellation: no messages, not a timeout
 			return nil, fmt.Errorf("consume canceled: %w", parentErr)
 		}
 		if config.ExpectTimeout {
+			flush(true, false, true) // returns the partial batch: count it
 			return messages, nil
 		}
+		flush(false, false, true) // timeout, returns nil: count the timeout only
 		return nil, fmt.Errorf("consume timed out after %s with %d of %d messages", r.maxWait, len(messages), config.Limit)
 	}
+	flush(true, false, false) // success: count the returned messages
 	return messages, nil
 }
 
@@ -284,9 +313,16 @@ func (r *Reader) Consume(config ConsumeConfig) ([]ConsumedMessage, error) {
 // group for a group consumer).
 func (r *Reader) Close() {
 	if r.client != nil {
+		r.collector.flushClose(r.vu)
 		r.client.Close()
 		r.client = nil
 	}
+}
+
+// readerLag is the consumer lag for a message: messages remaining after this
+// one, i.e. high watermark minus offset minus one, floored at zero.
+func readerLag(highWatermark, offset int64) int64 {
+	return max(int64(0), highWatermark-offset-1)
 }
 
 // decodeRecord converts a franz-go record to a ConsumedMessage.

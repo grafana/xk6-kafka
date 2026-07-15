@@ -86,7 +86,7 @@ func TestToBytes(t *testing.T) {
 func TestOpenWriterRequiresBrokers(t *testing.T) {
 	t.Parallel()
 	rt := modulestest.NewRuntime(t)
-	_, err := openWriter(rt.VU, WriterConfig{Topic: "t"})
+	_, err := openWriter(rt.VU, WriterConfig{Topic: "t"}, nil)
 	require.Error(t, err)
 }
 
@@ -94,7 +94,7 @@ func TestOpenWriterRejectsInvalidAcks(t *testing.T) {
 	t.Parallel()
 	rt := modulestest.NewRuntime(t)
 	acks := 2
-	_, err := openWriter(rt.VU, WriterConfig{Brokers: []string{"localhost:9092"}, RequiredAcks: &acks})
+	_, err := openWriter(rt.VU, WriterConfig{Brokers: []string{"localhost:9092"}, RequiredAcks: &acks}, nil)
 	require.Error(t, err)
 }
 
@@ -102,7 +102,7 @@ func TestOpenWriterRejectsNegativeMaxAttempts(t *testing.T) {
 	t.Parallel()
 	rt := modulestest.NewRuntime(t)
 	n := -1
-	_, err := openWriter(rt.VU, WriterConfig{Brokers: []string{"localhost:9092"}, MaxAttempts: &n})
+	_, err := openWriter(rt.VU, WriterConfig{Brokers: []string{"localhost:9092"}, MaxAttempts: &n}, nil)
 	require.Error(t, err)
 }
 
@@ -110,7 +110,7 @@ func TestProduceAfterCloseErrors(t *testing.T) {
 	t.Parallel()
 	rt := modulestest.NewRuntime(t)
 	rt.MoveToVUContext(&lib.State{}) // non-nil VU state so produce passes the init guard
-	w, err := openWriter(rt.VU, WriterConfig{Brokers: []string{"localhost:9092"}, Topic: "t"})
+	w, err := openWriter(rt.VU, WriterConfig{Brokers: []string{"localhost:9092"}, Topic: "t"}, nil)
 	require.NoError(t, err)
 	w.Close()
 
@@ -123,7 +123,7 @@ func TestWriterExposesMethods(t *testing.T) {
 	t.Parallel()
 	rt := modulestest.NewRuntime(t)
 	// NewClient is lazy, so a Writer constructs without a broker.
-	w, err := openWriter(rt.VU, WriterConfig{Brokers: []string{"localhost:9092"}, Topic: "t"})
+	w, err := openWriter(rt.VU, WriterConfig{Brokers: []string{"localhost:9092"}, Topic: "t"}, nil)
 	require.NoError(t, err)
 	t.Cleanup(w.Close)
 	require.NoError(t, rt.VU.Runtime().Set("w", w))

@@ -81,41 +81,49 @@ func TestDecodeRecord(t *testing.T) {
 	require.Contains(t, mn.Time, "123456789")
 }
 
+func TestReaderLag(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, int64(4), readerLag(10, 5))  // 10-5-1
+	require.Equal(t, int64(0), readerLag(10, 9))  // at head: 10-9-1=0
+	require.Equal(t, int64(0), readerLag(10, 10)) // offset==hwm: floored at 0
+	require.Equal(t, int64(0), readerLag(0, 0))
+}
+
 func TestOpenReaderValidation(t *testing.T) {
 	t.Parallel()
 	rt := modulestest.NewRuntime(t)
 
 	// No brokers.
-	_, err := openReader(rt.VU, ReaderConfig{Topic: "t"})
+	_, err := openReader(rt.VU, ReaderConfig{Topic: "t"}, nil)
 	require.Error(t, err)
 
 	// Group with neither groupTopics nor topic.
-	_, err = openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, GroupID: "g"})
+	_, err = openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, GroupID: "g"}, nil)
 	require.Error(t, err)
 
 	// Direct without topic.
-	_, err = openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}})
+	_, err = openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}}, nil)
 	require.Error(t, err)
 
 	// Invalid maxWait.
-	_, err = openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t", MaxWait: "soon"})
+	_, err = openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t", MaxWait: "soon"}, nil)
 	require.Error(t, err)
 
 	// Offset below -1 is rejected.
 	bad := int64(-2)
-	_, err = openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t", Offset: &bad})
+	_, err = openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t", Offset: &bad}, nil)
 	require.Error(t, err)
 
 	// Negative maxAttempts is rejected.
 	neg := -1
-	_, err = openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t", MaxAttempts: &neg})
+	_, err = openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t", MaxAttempts: &neg}, nil)
 	require.Error(t, err)
 
 	// Valid direct and group constructions (NewClient is lazy).
-	r, err := openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t"})
+	r, err := openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t"}, nil)
 	require.NoError(t, err)
 	r.Close()
-	r, err = openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, GroupID: "g", Topic: "t"})
+	r, err = openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, GroupID: "g", Topic: "t"}, nil)
 	require.NoError(t, err)
 	r.Close()
 }
@@ -123,7 +131,7 @@ func TestOpenReaderValidation(t *testing.T) {
 func TestReaderExposesMethods(t *testing.T) {
 	t.Parallel()
 	rt := modulestest.NewRuntime(t)
-	r, err := openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t"})
+	r, err := openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t"}, nil)
 	require.NoError(t, err)
 	t.Cleanup(r.Close)
 	require.NoError(t, rt.VU.Runtime().Set("r", r))
@@ -136,7 +144,7 @@ func TestReaderExposesMethods(t *testing.T) {
 func TestConsumeRejectsInitContext(t *testing.T) {
 	t.Parallel()
 	rt := modulestest.NewRuntime(t) // init context: State is nil
-	r, err := openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t"})
+	r, err := openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t"}, nil)
 	require.NoError(t, err)
 	t.Cleanup(r.Close)
 
@@ -148,7 +156,7 @@ func TestConsumeCancellationNotTimeout(t *testing.T) {
 	t.Parallel()
 	rt := modulestest.NewRuntime(t)
 	rt.MoveToVUContext(&lib.State{})
-	r, err := openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t"})
+	r, err := openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t"}, nil)
 	require.NoError(t, err)
 	t.Cleanup(r.Close)
 
@@ -162,7 +170,7 @@ func TestConsumeAfterCloseErrors(t *testing.T) {
 	t.Parallel()
 	rt := modulestest.NewRuntime(t)
 	rt.MoveToVUContext(&lib.State{})
-	r, err := openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t"})
+	r, err := openReader(rt.VU, ReaderConfig{Brokers: []string{"b:9092"}, Topic: "t"}, nil)
 	require.NoError(t, err)
 	r.Close()
 

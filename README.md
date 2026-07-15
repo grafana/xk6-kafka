@@ -116,6 +116,47 @@ writer.produce({
 
 Supports Avro and JSON schemas via Confluent wire format. Standalone mode (no registry) is also supported for inline schemas. Protobuf serdes is not supported in v1 (see the limitations below).
 
+## Metrics
+
+The `Writer` and `Reader` emit custom k6 metrics into the end-of-test summary,
+using the community `mostafa/xk6-kafka` v1 names, so you can assert on them in
+`thresholds`. Metrics franz-go attributes to a topic (message counts/bytes, lag,
+offset, and the per-topic batch/fetch metrics) carry a `topic` tag. The
+broker-request-level timings (`*_dial_*`, `*_write_seconds`, `*_read_seconds`,
+`*_wait_seconds`) are untagged, because one request batches many topics.
+
+```javascript
+export const options = {
+  thresholds: {
+    kafka_writer_error_count: ["count==0"],
+    "kafka_reader_message_count{topic:my-topic}": ["count>0"],
+  },
+};
+```
+
+**Writer:** `kafka_writer_message_count`, `kafka_writer_message_bytes`,
+`kafka_writer_write_count`, `kafka_writer_error_count`,
+`kafka_writer_batch_size`, `kafka_writer_batch_bytes`,
+`kafka_writer_write_seconds`, `kafka_writer_wait_seconds`,
+`kafka_writer_dial_count`, `kafka_writer_dial_seconds`.
+
+**Reader:** `kafka_reader_message_count`, `kafka_reader_message_bytes`,
+`kafka_reader_fetches_count`, `kafka_reader_error_count`,
+`kafka_reader_timeouts_count`, `kafka_reader_lag`, `kafka_reader_offset`,
+`kafka_reader_fetch_size`, `kafka_reader_fetch_bytes`,
+`kafka_reader_read_seconds`, `kafka_reader_wait_seconds`,
+`kafka_reader_dial_count`, `kafka_reader_dial_seconds`.
+
+Message counts, bytes, lag, and offset are exact (measured at produce/consume);
+the hook-derived trends (batch/fetch sizes and the `*_seconds` timings) are
+franz-go-derived and batch-granular, so they approximate — rather than exactly
+reproduce — the community's `segmentio/kafka-go`-derived values.
+
+**Not emitted** (no franz-go source; present in the community extension):
+`kafka_writer_retries_count`, `kafka_writer_batch_seconds`,
+`kafka_reader_rebalance_count`, `kafka_reader_queue_length`,
+`kafka_reader_queue_capacity`.
+
 ## Compatibility
 
 This extension aims for **familiarity, not a guarantee**: most community v1 scripts are expected to run with little or no change, but identical behavior is not promised. Some legacy tuning options have no pure-Go equivalent and are accepted but ignored, so behavior can differ in edge cases. Users who need behavior-identical, zero-change continuity should stay on `mostafa/xk6-kafka`.
