@@ -4,11 +4,163 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/grafana/sobek"
 	"github.com/stretchr/testify/require"
 )
+
+// cachingTestRegistry is an httptest registry that counts schema GET requests.
+// /config returns 200; GET /subjects/.../versions/... returns a fixed v1 schema;
+// POST /subjects/.../versions returns an id.
+func cachingTestRegistry(t *testing.T) (*httptest.Server, *int32) {
+	t.Helper()
+	var gets int32
+	const schemaJSON = `{"id":1,"version":1,"subject":"s-value","schema":"\"string\"","schemaType":"STRING"}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/config":
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/versions/"):
+			atomic.AddInt32(&gets, 1)
+			_, _ = w.Write([]byte(schemaJSON))
+		case r.Method == http.MethodPost:
+			_, _ = w.Write([]byte(`{"id":2}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &gets
+}
+
+func TestGetSchemaCacheHit(t *testing.T) {
+	t.Parallel()
+	srv, gets := cachingTestRegistry(t)
+	sr, err := NewSchemaRegistry(nil, &SchemaRegistryConfig{URL: srv.URL, EnableCaching: true})
+	require.NoError(t, err)
+
+	s1, err := sr.GetSchema(&Schema{Subject: "s-value"})
+	require.NoError(t, err)
+	s2, err := sr.GetSchema(&Schema{Subject: "s-value"})
+	require.NoError(t, err)
+
+	require.Equal(t, int32(1), atomic.LoadInt32(gets), "second getSchema served from cache")
+	require.Equal(t, s1.ID, s2.ID)
+	require.NotSame(t, s1, s2, "cache hits return independent copies")
+}
+
+func TestGetSchemaCachingDisabled(t *testing.T) {
+	t.Parallel()
+	srv, gets := cachingTestRegistry(t)
+	sr, err := NewSchemaRegistry(nil, &SchemaRegistryConfig{URL: srv.URL}) // EnableCaching false
+	require.NoError(t, err)
+
+	_, err = sr.GetSchema(&Schema{Subject: "s-value"})
+	require.NoError(t, err)
+	_, err = sr.GetSchema(&Schema{Subject: "s-value"})
+	require.NoError(t, err)
+	require.Equal(t, int32(2), atomic.LoadInt32(gets), "no caching: both calls hit the registry")
+}
+
+func TestGetSchemaVersionsCachedSeparately(t *testing.T) {
+	t.Parallel()
+	srv, gets := cachingTestRegistry(t)
+	sr, err := NewSchemaRegistry(nil, &SchemaRegistryConfig{URL: srv.URL, EnableCaching: true})
+	require.NoError(t, err)
+
+	_, _ = sr.GetSchema(&Schema{Subject: "s-value"})             // latest
+	_, _ = sr.GetSchema(&Schema{Subject: "s-value", Version: 1}) // explicit v1
+	require.Equal(t, int32(2), atomic.LoadInt32(gets), "latest and explicit version are distinct keys")
+	// Repeats are cache hits.
+	_, _ = sr.GetSchema(&Schema{Subject: "s-value"})
+	_, _ = sr.GetSchema(&Schema{Subject: "s-value", Version: 1})
+	require.Equal(t, int32(2), atomic.LoadInt32(gets))
+}
+
+func TestCreateSchemaDoesNotSeedCache(t *testing.T) {
+	t.Parallel()
+	srv, gets := cachingTestRegistry(t)
+	sr, err := NewSchemaRegistry(nil, &SchemaRegistryConfig{URL: srv.URL, EnableCaching: true})
+	require.NoError(t, err)
+
+	_, err = sr.CreateSchema(&Schema{Subject: "s-value", Schema: `"string"`, SchemaType: "STRING"})
+	require.NoError(t, err)
+	_, err = sr.GetSchema(&Schema{Subject: "s-value"})
+	require.NoError(t, err)
+	require.Equal(t, int32(1), atomic.LoadInt32(gets), "createSchema did not seed; getSchema still fetched")
+}
+
+func TestCachedLatestStableAfterCreate(t *testing.T) {
+	t.Parallel()
+	srv, gets := cachingTestRegistry(t)
+	sr, err := NewSchemaRegistry(nil, &SchemaRegistryConfig{URL: srv.URL, EnableCaching: true})
+	require.NoError(t, err)
+
+	first, err := sr.GetSchema(&Schema{Subject: "s-value"}) // caches latest (v1)
+	require.NoError(t, err)
+	_, err = sr.CreateSchema(&Schema{Subject: "s-value", Schema: `"string"`, SchemaType: "STRING"})
+	require.NoError(t, err)
+	again, err := sr.GetSchema(&Schema{Subject: "s-value"}) // served from cache
+	require.NoError(t, err)
+
+	require.Equal(t, int32(1), atomic.LoadInt32(gets), "createSchema did not refresh the cached latest")
+	require.Equal(t, first.Version, again.Version)
+}
+
+func TestGetSchemaHitIsIndependentCopy(t *testing.T) {
+	t.Parallel()
+	srv, _ := cachingTestRegistry(t)
+	sr, err := NewSchemaRegistry(nil, &SchemaRegistryConfig{URL: srv.URL, EnableCaching: true})
+	require.NoError(t, err)
+
+	s1, err := sr.GetSchema(&Schema{Subject: "s-value"})
+	require.NoError(t, err)
+	s1.Version = 999 // mutate the returned schema
+	s2, err := sr.GetSchema(&Schema{Subject: "s-value"})
+	require.NoError(t, err)
+	require.NotEqual(t, 999, s2.Version, "mutating a returned schema must not corrupt the cache")
+}
+
+func TestParsedAvroReuse(t *testing.T) {
+	t.Parallel()
+	// Go through the real constructor: standalone construction must initialize
+	// the always-on parsed-Avro cache (a regression there would fail here).
+	sr, err := NewSchemaRegistry(nil, nil)
+	require.NoError(t, err)
+	const s = `{"type":"record","name":"R","fields":[{"name":"a","type":"int"}]}`
+
+	p1, err := sr.parsedAvro(s)
+	require.NoError(t, err)
+	p2, err := sr.parsedAvro(s)
+	require.NoError(t, err)
+	require.True(t, p1 == p2, "same schema string returns the same parsed value")
+
+	// A parse failure is not cached: it still errors on repeat.
+	_, err = sr.parsedAvro(`{not valid`)
+	require.Error(t, err)
+	_, err = sr.parsedAvro(`{not valid`)
+	require.Error(t, err)
+}
+
+func TestStandaloneSerializeReusesParsedAvro(t *testing.T) {
+	t.Parallel()
+	// End-to-end: a standalone client serializing repeatedly with the same
+	// inline Avro schema parses it once (always-on reuse, no enableCaching).
+	sr, err := NewSchemaRegistry(nil, nil)
+	require.NoError(t, err)
+	schema := &Schema{
+		Schema:     `{"type":"record","name":"R","fields":[{"name":"a","type":"int"}]}`,
+		SchemaType: "AVRO",
+	}
+	_, err = sr.serialize(map[string]any{"a": 1}, "AVRO", schema)
+	require.NoError(t, err)
+	_, err = sr.serialize(map[string]any{"a": 2}, "AVRO", schema)
+	require.NoError(t, err)
+	require.Len(t, sr.avroCache, 1, "schema parsed once and reused across serialize calls")
+}
 
 func TestSchemaRegistryTLS(t *testing.T) {
 	t.Parallel()

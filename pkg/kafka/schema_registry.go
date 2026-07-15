@@ -12,7 +12,9 @@ import (
 	"math"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -63,9 +65,10 @@ type SubjectNameConfig struct {
 
 // SchemaRegistryConfig holds Schema Registry connection settings.
 type SchemaRegistryConfig struct {
-	URL       string     `js:"url"`
-	BasicAuth *BasicAuth `js:"basicAuth"`
-	TLS       *TLSConfig `js:"tls"`
+	URL           string     `js:"url"`
+	BasicAuth     *BasicAuth `js:"basicAuth"`
+	TLS           *TLSConfig `js:"tls"`
+	EnableCaching bool       `js:"enableCaching"`
 }
 
 // SchemaRegistry is a client for Schema Registry and serdes operations.
@@ -73,6 +76,14 @@ type SchemaRegistry struct {
 	vu     modules.VU
 	config *SchemaRegistryConfig
 	client *http.Client
+
+	// enableCaching gates the registry-response cache (schemaCache) only.
+	// Parsed-Avro reuse (avroCache) is always on. Both maps are guarded by mu,
+	// which is defensive: access is only from the VU's JS goroutine.
+	enableCaching bool
+	mu            sync.RWMutex
+	schemaCache   map[string]*Schema
+	avroCache     map[string]avro.Schema
 }
 
 // reqContext returns the VU context when one is available, so registry calls
@@ -96,8 +107,13 @@ func vuContext(vu modules.VU) context.Context {
 // NewSchemaRegistry creates a new SchemaRegistry client.
 func NewSchemaRegistry(vu modules.VU, config *SchemaRegistryConfig) (*SchemaRegistry, error) {
 	if config == nil {
-		// Standalone mode: no registry
-		return &SchemaRegistry{vu: vu, config: nil}, nil
+		// Standalone mode: no registry, so no registry-response caching, but
+		// parsed-Avro reuse still applies to inline schemas.
+		return &SchemaRegistry{
+			vu:        vu,
+			config:    nil,
+			avroCache: map[string]avro.Schema{},
+		}, nil
 	}
 
 	if config.URL == "" {
@@ -136,11 +152,46 @@ func NewSchemaRegistry(vu modules.VU, config *SchemaRegistryConfig) (*SchemaRegi
 	}
 
 	sr := &SchemaRegistry{
-		vu:     vu,
-		config: config,
-		client: httpClient,
+		vu:            vu,
+		config:        config,
+		client:        httpClient,
+		enableCaching: config.EnableCaching,
+		schemaCache:   map[string]*Schema{},
+		avroCache:     map[string]avro.Schema{},
 	}
 	return sr, nil
+}
+
+// schemaCacheKey keys the response cache by subject and requested version;
+// a nil version means "latest".
+func schemaCacheKey(subject string, version *int) string {
+	if version == nil {
+		return subject + "\x00"
+	}
+	return subject + "\x00" + strconv.Itoa(*version)
+}
+
+// parsedAvro parses an Avro schema string, reusing a previously parsed result.
+// Reuse is always on (behavior-neutral); a parse failure is not cached.
+func (sr *SchemaRegistry) parsedAvro(schemaStr string) (avro.Schema, error) {
+	if sr.avroCache != nil {
+		sr.mu.RLock()
+		cached, ok := sr.avroCache[schemaStr]
+		sr.mu.RUnlock()
+		if ok {
+			return cached, nil
+		}
+	}
+	parsed, err := avro.Parse(schemaStr)
+	if err != nil {
+		return nil, err
+	}
+	if sr.avroCache != nil {
+		sr.mu.Lock()
+		sr.avroCache[schemaStr] = parsed
+		sr.mu.Unlock()
+	}
+	return parsed, nil
 }
 
 // GetSchema fetches a schema from the registry.
@@ -163,6 +214,16 @@ func (sr *SchemaRegistry) GetSchema(schemaParam *Schema) (*Schema, error) {
 func (sr *SchemaRegistry) getSchema(subject string, version *int) (*Schema, error) {
 	if sr.config == nil {
 		return nil, fmt.Errorf("SchemaRegistry: getSchema requires registry configuration (standalone mode not supported)")
+	}
+
+	key := schemaCacheKey(subject, version)
+	if sr.enableCaching {
+		sr.mu.RLock()
+		cached, ok := sr.schemaCache[key]
+		sr.mu.RUnlock()
+		if ok {
+			return copySchema(cached), nil
+		}
 	}
 
 	path := fmt.Sprintf("/subjects/%s/versions/latest", subject)
@@ -194,7 +255,21 @@ func (sr *SchemaRegistry) getSchema(subject string, version *int) (*Schema, erro
 		return nil, fmt.Errorf("SchemaRegistry: failed to decode response: %w", err)
 	}
 
+	if sr.enableCaching {
+		sr.mu.Lock()
+		sr.schemaCache[key] = &schema
+		sr.mu.Unlock()
+		// Return a copy so the first caller cannot mutate the cached entry.
+		return copySchema(&schema), nil
+	}
 	return &schema, nil
+}
+
+// copySchema returns an independent shallow copy of a Schema. Schema has only
+// scalar fields, so a shallow copy fully isolates the cached entry from callers.
+func copySchema(s *Schema) *Schema {
+	c := *s
+	return &c
 }
 
 // CreateSchema registers a schema in the registry.
@@ -594,7 +669,7 @@ func (sr *SchemaRegistry) serialize(data any, schemaType string, schema *Schema)
 		if schema == nil {
 			return nil, fmt.Errorf("SchemaRegistry: AVRO serialize requires schema")
 		}
-		avroSchema, err := avro.Parse(schema.Schema)
+		avroSchema, err := sr.parsedAvro(schema.Schema)
 		if err != nil {
 			return nil, fmt.Errorf("SchemaRegistry: failed to parse Avro schema: %w", err)
 		}
@@ -699,7 +774,7 @@ func (sr *SchemaRegistry) deserialize(data []byte, schemaType string, schema *Sc
 			return nil, err
 		}
 
-		avroSchema, err := avro.Parse(schema.Schema)
+		avroSchema, err := sr.parsedAvro(schema.Schema)
 		if err != nil {
 			return nil, fmt.Errorf("SchemaRegistry: failed to parse Avro schema: %w", err)
 		}

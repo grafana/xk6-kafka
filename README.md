@@ -165,7 +165,7 @@ This extension aims for **familiarity, not a guarantee**: most community v1 scri
 
 The Schema Registry implementation focuses on the core serdes workflows and does not yet include:
 
-- **Caching**: schemas are fetched from the registry on each call (no client-side cache). For bulk produce/consume operations, fetch schemas once in init and reuse them.
+- **Caching**: set `enableCaching: true` on the `SchemaRegistry` config to cache resolved schemas, so repeated `getSchema` of the same subject/version skip the registry (off by default). A cached `latest` is not refreshed for the client's lifetime — a schema evolved mid-run is not observed and can surface as a `deserialize` schema-id mismatch, so caching suits tests with stable schemas. Parsed Avro schemas are always reused (no re-parse per serdes call), regardless of the flag. The per-schema `Schema.enableCaching` field is accepted but ignored; caching is controlled at the client level.
 - **Complex schema references**: multi-schema compositions (imports for Protobuf, `$ref` for JSON Schema) are not supported.
 - **Protobuf**: only Avro and JSON are fully supported; Protobuf serdes is not yet implemented.
 - **JSON validation**: only checks `required` fields; type mismatches and other schema violations may not be caught.
