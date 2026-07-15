@@ -6,44 +6,44 @@ package kafka
 
 // SASLConfig configures SASL authentication.
 type SASLConfig struct {
-	Username   string `json:"username"`
-	Password   string `json:"password"` //nolint:gosec // config field name, not a hardcoded credential
-	Algorithm  string `json:"algorithm"`
-	AWSProfile string `json:"awsProfile"`
+	Username   string `js:"username"`
+	Password   string `js:"password"` //nolint:gosec // config field name, not a hardcoded credential
+	Algorithm  string `js:"algorithm"`
+	AWSProfile string `js:"awsProfile"`
 }
 
 // TLSConfig configures a TLS connection.
 type TLSConfig struct {
-	EnableTLS             bool   `json:"enableTls"`
-	InsecureSkipTLSVerify bool   `json:"insecureSkipTlsVerify"`
-	MinVersion            string `json:"minVersion"`
-	ClientCertPem         string `json:"clientCertPem"`
-	ClientKeyPem          string `json:"clientKeyPem"`
-	ServerCaPem           string `json:"serverCaPem"`
+	EnableTLS             bool   `js:"enableTls"`
+	InsecureSkipTLSVerify bool   `js:"insecureSkipTlsVerify"`
+	MinVersion            string `js:"minVersion"`
+	ClientCertPem         string `js:"clientCertPem"`
+	ClientKeyPem          string `js:"clientKeyPem"`
+	ServerCaPem           string `js:"serverCaPem"`
 }
 
 // ConnectionConfig configures a Connection.
 type ConnectionConfig struct {
-	Address string      `json:"address"`
-	SASL    *SASLConfig `json:"sasl"`
-	TLS     *TLSConfig  `json:"tls"`
+	Address string      `js:"address"`
+	SASL    *SASLConfig `js:"sasl"`
+	TLS     *TLSConfig  `js:"tls"`
 }
 
 // JKSConfig configures loading a Java KeyStore.
 type JKSConfig struct {
-	Path     string `json:"path"`
-	Password string `json:"password"` //nolint:gosec // config field name, not a hardcoded credential
+	Path     string `js:"path"`
+	Password string `js:"password"` //nolint:gosec // config field name, not a hardcoded credential
 	// ClientCertAlias is accepted for contract compatibility but not used: the
 	// client certificate chain comes from the private-key entry (ClientKeyAlias).
-	ClientCertAlias   string `json:"clientCertAlias"`
-	ClientKeyAlias    string `json:"clientKeyAlias"`
-	ClientKeyPassword string `json:"clientKeyPassword"`
-	ServerCaAlias     string `json:"serverCaAlias"`
+	ClientCertAlias   string `js:"clientCertAlias"`
+	ClientKeyAlias    string `js:"clientKeyAlias"`
+	ClientKeyPassword string `js:"clientKeyPassword"`
+	ServerCaAlias     string `js:"serverCaAlias"`
 }
 
 // JKS is the PEM material extracted from a Java KeyStore.
 type JKS struct {
-	ClientCertsPem []string `json:"clientCertsPem"`
-	ClientKeyPem   string   `json:"clientKeyPem"`
-	ServerCaPem    string   `json:"serverCaPem"`
+	ClientCertsPem []string `js:"clientCertsPem"`
+	ClientKeyPem   string   `js:"clientKeyPem"`
+	ServerCaPem    string   `js:"serverCaPem"`
 }
