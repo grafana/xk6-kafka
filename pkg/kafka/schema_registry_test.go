@@ -162,6 +162,67 @@ func TestStandaloneSerializeReusesParsedAvro(t *testing.T) {
 	require.Len(t, sr.avroCache, 1, "schema parsed once and reused across serialize calls")
 }
 
+const (
+	avroRecordNS   = `{"type":"record","name":"User","namespace":"com.example","fields":[{"name":"id","type":"int"}]}`
+	avroRecordBare = `{"type":"record","name":"User","fields":[{"name":"id","type":"int"}]}`
+	avroEnumNS     = `{"type":"enum","name":"Color","namespace":"com.example","symbols":["RED","GREEN"]}`
+)
+
+func TestGetSubjectNameStrategies(t *testing.T) {
+	t.Parallel()
+	sr, err := NewSchemaRegistry(nil, nil)
+	require.NoError(t, err)
+
+	cases := []struct{ name, strategy, element, schema, want string }{
+		{"topic-value", topicNameStrategy, elementValue, "", "t-value"},
+		{"topic-key", topicNameStrategy, elementKey, "", "t-key"},
+		{"empty-defaults-to-topic", "", elementValue, "", "t-value"},
+		{"topic-ignores-schema", topicNameStrategy, elementValue, avroRecordNS, "t-value"},
+		{"record-namespaced", recordNameStrategy, elementValue, avroRecordNS, "com.example.User"},
+		{"record-no-namespace", recordNameStrategy, elementValue, avroRecordBare, "User"},
+		{"record-enum", recordNameStrategy, elementValue, avroEnumNS, "com.example.Color"},
+		{"topic-record", topicRecordNameStrategy, elementValue, avroRecordNS, "t-com.example.User"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := sr.GetSubjectName(&SubjectNameConfig{
+				Topic: "t", Element: c.element, SubjectNameStrategy: c.strategy, Schema: c.schema,
+			})
+			require.NoError(t, err)
+			require.Equal(t, c.want, got)
+		})
+	}
+}
+
+func TestGetSubjectNameErrors(t *testing.T) {
+	t.Parallel()
+	sr, err := NewSchemaRegistry(nil, nil)
+	require.NoError(t, err)
+
+	recordStrategies := []string{recordNameStrategy, topicRecordNameStrategy}
+
+	// Empty schema errors for both record strategies.
+	for _, s := range recordStrategies {
+		_, err := sr.GetSubjectName(&SubjectNameConfig{Topic: "t", Element: elementValue, SubjectNameStrategy: s})
+		require.Error(t, err, "empty schema, strategy %s", s)
+	}
+	// Non-Avro / unnamed schema errors for both record strategies.
+	for _, s := range recordStrategies {
+		for _, bad := range []string{`{"type":"object","title":"User"}`, `"string"`} {
+			_, err := sr.GetSubjectName(&SubjectNameConfig{
+				Topic: "t", Element: elementValue, SubjectNameStrategy: s, Schema: bad,
+			})
+			require.Error(t, err, "strategy %s, schema %s", s, bad)
+		}
+	}
+	// Unknown strategy errors.
+	_, err = sr.GetSubjectName(&SubjectNameConfig{
+		Topic: "t", Element: elementValue, SubjectNameStrategy: "BogusStrategy", Schema: avroRecordNS,
+	})
+	require.Error(t, err)
+}
+
 func TestSchemaRegistryTLS(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

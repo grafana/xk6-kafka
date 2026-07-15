@@ -169,6 +169,7 @@ The Schema Registry implementation focuses on the core serdes workflows and does
 - **Complex schema references**: multi-schema compositions (imports for Protobuf, `$ref` for JSON Schema) are not supported.
 - **Protobuf**: only Avro and JSON are fully supported; Protobuf serdes is not yet implemented.
 - **JSON validation**: only checks `required` fields; type mismatches and other schema violations may not be caught.
+- **Subject-name strategies**: `TOPIC_NAME_STRATEGY` works for any serdes. `RECORD_NAME_STRATEGY` and `TOPIC_RECORD_NAME_STRATEGY` derive the record name from an **Avro** named schema (record/enum/fixed); JSON Schema and Protobuf record naming are not supported and return an error. An unknown strategy also errors. **Migration note:** earlier builds silently treated the record strategies as `TOPIC_NAME_STRATEGY` (`{topic}-{element}`); a script relying on that now gets the real record-name subject (or an error), which can change the registry subject it targets.
 
 These may be added in future releases based on demand.
 
