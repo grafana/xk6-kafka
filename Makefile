@@ -38,10 +38,11 @@ test: ## Run the unit tests (go test)
 KAFKA_BROKER ?=
 
 .PHONY: it
-it: ## Run the integration tests (requires KAFKA_BROKER; see broker-up / integration)
-	@if [ -z "$(KAFKA_BROKER)" ]; then \
-	  echo "KAFKA_BROKER is not set. Run 'make integration' (starts a broker), or"; \
-	  echo "'make broker-up' then 'KAFKA_BROKER=localhost:9092 make it'."; \
+it: ## Run the integration tests (requires KAFKA_BROKER + KAFKA_SASL_BROKER; see broker-up / integration)
+	@if [ -z "$(KAFKA_BROKER)" ] || [ -z "$(KAFKA_SASL_BROKER)" ]; then \
+	  echo "KAFKA_BROKER and KAFKA_SASL_BROKER must be set (the SASL test must not skip silently)."; \
+	  echo "Run 'make integration' (starts a broker and sets both), or 'make broker-up' then"; \
+	  echo "'KAFKA_BROKER=localhost:9092 KAFKA_SASL_BROKER=localhost:9094 make it'."; \
 	  exit 1; \
 	fi
 	xk6 test "test/integration/*.js"
@@ -57,7 +58,8 @@ broker-down: ## Stop and remove the local Kafka (incl. volumes)
 .PHONY: integration
 integration: ## Start a broker, run the integration tests, then tear it down
 	@$(MAKE) broker-up
-	@set -e; trap '$(MAKE) broker-down' EXIT; KAFKA_BROKER=localhost:9092 SCHEMA_REGISTRY_URL=http://localhost:8081 $(MAKE) it
+	@set -e; trap '$(MAKE) broker-down' EXIT; \
+	  KAFKA_BROKER=localhost:9092 KAFKA_SASL_BROKER=localhost:9094 SCHEMA_REGISTRY_URL=http://localhost:8081 $(MAKE) it
 
 $(LINT_BASE): $(WORKFLOW)
 	curl -fsSL $(BASE_URL) -o $@

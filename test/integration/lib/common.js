@@ -38,6 +38,18 @@ export function getSchemaRegistry() {
   return url || null;
 }
 
+// getSaslBroker returns KAFKA_SASL_BROKER (a SASL_PLAINTEXT listener) or null.
+// The SASL auth test skips when it is unset (e.g. an external broker with no
+// SASL listener); `make integration` and CI set it to the compose SASL port.
+export function getSaslBroker() {
+  return __ENV.KAFKA_SASL_BROKER || null;
+}
+
+// SASL credentials for the SASL_PLAINTEXT listener, matching the JAAS user in
+// compose.yaml. Overridable via env for a different broker.
+export const saslUser = __ENV.KAFKA_SASL_USER || "testuser";
+export const saslPass = __ENV.KAFKA_SASL_PASS || "testpass";
+
 // verify runs a named check and records a failure against the error budget.
 // Returns the boolean result so callers can branch when needed.
 export function verify(name, condition) {
