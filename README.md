@@ -43,11 +43,11 @@ To keep the broker running between runs (e.g. while iterating), start it once an
 
 ```bash
 make broker-up
-KAFKA_BROKER=localhost:9092 make it
+KAFKA_BROKER=localhost:9092 KAFKA_SASL_BROKER=localhost:9094 make it
 make broker-down
 ```
 
-`make it` fails if `KAFKA_BROKER` is unset — the integration tests never skip silently. The same `compose.yaml` broker is used in CI, so local and CI runs match.
+`make it` fails if `KAFKA_BROKER` or `KAFKA_SASL_BROKER` is unset — the integration tests (including the SASL auth test) never skip silently. `compose.yaml` exposes a plaintext listener on `9092` and a SASL_PLAINTEXT listener on `9094`; the same broker is used in CI, so local and CI runs match.
 
 ## Usage
 

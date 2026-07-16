@@ -41,6 +41,7 @@ jobs:
       - name: Integration tests
         env:
           KAFKA_BROKER: localhost:9092
+          KAFKA_SASL_BROKER: localhost:9094
           SCHEMA_REGISTRY_URL: http://localhost:8081
         run: make it
 
