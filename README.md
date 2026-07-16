@@ -175,6 +175,16 @@ The Schema Registry implementation focuses on the core serdes workflows and does
 
 These may be added in future releases based on demand.
 
+## Releases
+
+Releases are published as [GitHub Releases](https://github.com/grafana/xk6-kafka/releases) with auto-generated notes; there is no `CHANGELOG` file. Notes are grouped by PR label (Features, Fixes, Security, …) where the merged PRs are labeled; unlabeled PRs are listed under "Other Changes". Tags follow [semantic versioning](https://semver.org) (`vX.Y.Z`); a pre-release suffix (e.g. `v1.2.3-rc.1`) is marked as a prerelease.
+
+Once a release exists, pin it when building:
+
+```bash
+xk6 build --with github.com/grafana/xk6-kafka@v1.2.3
+```
+
 ## Acknowledgments
 
 This extension's API and design draw on the community [`mostafa/xk6-kafka`](https://github.com/mostafa/xk6-kafka) project by [Mostafa Moradian](https://github.com/mostafa). Thanks to Mostafa and its contributors for years of maintaining Kafka load testing in k6 and shaping the API that users know today.
