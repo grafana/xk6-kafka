@@ -13,7 +13,7 @@ It is designed as a **100% pure-Go** extension (`CGO_ENABLED=0`): no C toolchain
 - **Pure Go** — compiles without CGO, so it fits scratch containers, cross-compilation, and pure-Go build pipelines.
 - **Familiar API** — aims to be a near-drop-in replacement for community [`mostafa/xk6-kafka`](https://github.com/mostafa/xk6-kafka) v1 scripts: same import and API shape, so common producer, consumer, admin, auth, and Schema Registry scripts run with little or no change.
 
-See [RATIONALE.md](RATIONALE.md) for the problem, goals, and scope. Documentation and examples will land with the first release.
+See [RATIONALE.md](RATIONALE.md) for the problem, goals, and scope, the [migration guide](docs/MIGRATION.md) to port a community `mostafa/xk6-kafka` v1 script, and the [compatibility matrix](docs/COMPATIBILITY.md) for the full feature list.
 
 ## Build
 
@@ -161,6 +161,8 @@ reproduce — the community's `segmentio/kafka-go`-derived values.
 
 This extension aims for **familiarity, not a guarantee**: most community v1 scripts are expected to run with little or no change, but identical behavior is not promised. Some legacy tuning options have no pure-Go equivalent and are accepted but ignored, so behavior can differ in edge cases. Users who need behavior-identical, zero-change continuity should stay on `mostafa/xk6-kafka`.
 
+See the **[compatibility matrix](docs/COMPATIBILITY.md)** for the full list of supported, divergent, and unsupported features, and the **[migration guide](docs/MIGRATION.md)** for porting a community v1 script. Highlights of the Schema Registry gaps:
+
 ### Schema Registry Limitations (v1)
 
 The Schema Registry implementation focuses on the core serdes workflows and does not yet include:
@@ -172,8 +174,6 @@ The Schema Registry implementation focuses on the core serdes workflows and does
 - **Subject-name strategies**: `TOPIC_NAME_STRATEGY` works for any serdes. `RECORD_NAME_STRATEGY` and `TOPIC_RECORD_NAME_STRATEGY` derive the record name from an **Avro** named schema (record/enum/fixed); JSON Schema and Protobuf record naming are not supported and return an error. An unknown strategy also errors. **Migration note:** earlier builds silently treated the record strategies as `TOPIC_NAME_STRATEGY` (`{topic}-{element}`); a script relying on that now gets the real record-name subject (or an error), which can change the registry subject it targets.
 
 These may be added in future releases based on demand.
-
-A migration guide, a compatibility matrix, and known gaps for the main producer, consumer, admin, auth, and Schema Registry workflows will be published with the first release.
 
 ## Acknowledgments
 
