@@ -68,9 +68,13 @@ and GitHub issue #1 for the implementation epic.
 - **Compatibility fixtures** live under `test/integration/compat/` and are
   modernized ports of the community v1 scripts (broker address and Schema
   Registry URL from env, e.g. `KAFKA_BROKER`), keeping the original
-  `check()` assertions so behavior parity is what's verified. They are added
-  incrementally: each capability change ports the community script(s) it makes
-  runnable.
+  `check()` assertions. Most run essentially unchanged (env wiring only) as
+  behavior-parity evidence; where the community script relies on behavior this
+  extension intentionally diverges from, the port is a **migrated** fixture that
+  documents the migration instead (e.g. JSON serdes require a schema here, so
+  `compat/json.js` supplies one). `test/integration/compat/README.md` classifies
+  each fixture and records such divergences. They are added incrementally: each
+  capability change ports the community script(s) it makes runnable.
 - CI must run `golangci-lint`, `xk6 lint`, unit tests, `xk6 test`, and an
   `xk6 build` smoke test.
 
