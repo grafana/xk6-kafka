@@ -45,7 +45,7 @@ it: ## Run the integration tests (requires KAFKA_BROKER + KAFKA_SASL_BROKER; see
 	  echo "'KAFKA_BROKER=localhost:9092 KAFKA_SASL_BROKER=localhost:9094 make it'."; \
 	  exit 1; \
 	fi
-	xk6 test "test/integration/*.js"
+	xk6 test "test/integration/*.js" "test/integration/compat/*.js"
 
 .PHONY: broker-up
 broker-up: ## Start a local single-node Kafka (KRaft) and wait until ready
