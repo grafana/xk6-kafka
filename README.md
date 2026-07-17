@@ -1,7 +1,7 @@
 # xk6-kafka
 
-> [!WARNING]
-> **Early development.** Not yet released — the API below is the planned surface and may change.
+> [!NOTE]
+> **Pre-1.0 (`v0.x`).** The API targets the community [`mostafa/xk6-kafka`](https://github.com/mostafa/xk6-kafka) v1 surface and is stabilizing; minor changes are possible before `v1.0.0`.
 
 `grafana/xk6-kafka` is the official, Grafana-owned, pure-Go [k6 extension](https://grafana.com/docs/k6/latest/extensions/) for load testing [Apache Kafka](https://kafka.apache.org): producing and consuming messages, managing topics, authenticating, and working with Schema Registry.
 
@@ -23,7 +23,7 @@ Use [xk6](https://github.com/grafana/xk6) to build a k6 binary with the extensio
 xk6 build --with github.com/grafana/xk6-kafka
 ```
 
-This produces a `k6` binary in the current directory. No C toolchain required. Until the first release, this builds from the latest `main` and may be incomplete.
+This produces a `k6` binary in the current directory. No C toolchain required. This builds from the latest `main`; to pin a released version, append `@vX.Y.Z` (see [Releases](#releases)).
 
 ## Testing
 
@@ -52,7 +52,7 @@ make broker-down
 ## Usage
 
 > [!NOTE]
-> The example uses the planned v1-compatible API and is subject to change before release.
+> The example uses the v1-compatible API; minor changes are possible before `v1.0.0`.
 
 ```javascript
 import { Writer, Reader } from "k6/x/kafka";
