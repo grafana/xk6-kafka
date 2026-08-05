@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
-	"go.k6.io/k6/v2/js/modules"
+	"go.k6.io/k6/js/modules"
 )
 
 // defaultMaxWait is the consume poll deadline / fetch wait when maxWait is unset

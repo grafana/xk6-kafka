@@ -5,7 +5,7 @@
 package xk6kafka
 
 import (
-	"go.k6.io/k6/v2/js/modules"
+	"go.k6.io/k6/js/modules"
 
 	"github.com/grafana/xk6-kafka/pkg/kafka"
 )

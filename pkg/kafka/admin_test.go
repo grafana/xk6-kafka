@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
-	"go.k6.io/k6/v2/js/modulestest"
-	"go.k6.io/k6/v2/lib"
+	"go.k6.io/k6/js/modulestest"
+	"go.k6.io/k6/lib"
 )
 
 // newTestConnection builds a Connection with a lazy client (no dial) in the VU

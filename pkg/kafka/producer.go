@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
-	"go.k6.io/k6/v2/js/modules"
+	"go.k6.io/k6/js/modules"
 )
 
 // WriterConfig is the producer configuration (see index.d.ts WriterConfig).

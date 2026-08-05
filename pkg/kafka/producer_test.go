@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kgo"
-	"go.k6.io/k6/v2/js/modulestest"
-	"go.k6.io/k6/v2/lib"
+	"go.k6.io/k6/js/modulestest"
+	"go.k6.io/k6/lib"
 )
 
 func TestCompressionCodec(t *testing.T) {

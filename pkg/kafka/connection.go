@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
-	"go.k6.io/k6/v2/js/modules"
+	"go.k6.io/k6/js/modules"
 )
 
 // pingTimeout bounds the connectivity check performed when a Connection is

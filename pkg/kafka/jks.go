@@ -9,7 +9,7 @@ import (
 
 	"github.com/grafana/sobek"
 	keystore "github.com/pavlo-v-chernykh/keystore-go/v4"
-	"go.k6.io/k6/v2/js/common"
+	"go.k6.io/k6/js/common"
 )
 
 // loadJKS implements the LoadJKS function. It is an init-context operation: it

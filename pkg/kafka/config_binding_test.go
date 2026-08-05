@@ -5,7 +5,7 @@ import (
 
 	"github.com/grafana/sobek"
 	"github.com/stretchr/testify/require"
-	"go.k6.io/k6/v2/js/common"
+	"go.k6.io/k6/js/common"
 )
 
 // decodeJS decodes a JS object literal into dst through the exact field-name

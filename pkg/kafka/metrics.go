@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
-	"go.k6.io/k6/v2/js/modules"
-	"go.k6.io/k6/v2/metrics"
+	"go.k6.io/k6/js/modules"
+	"go.k6.io/k6/metrics"
 )
 
 // Kafka protocol API keys used to attribute broker read/write timing.
