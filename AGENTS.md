@@ -57,3 +57,4 @@ full project context and conventions.
 - Tags follow semver `vX.Y.Z`; a `-` suffix marks a prerelease.
 - **Do not add a `Co-Authored-By` trailer** to commits or PRs.
 - Run `make lint` and `make test` before pushing.
+- Security issues should be reported via [Grafana's security issue reporting page](https://grafana.com/legal/report-a-security-issue/) and not directly in this repository.
