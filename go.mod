@@ -1,16 +1,14 @@
 module github.com/grafana/xk6-kafka
 
-go 1.25.0
-
-toolchain go1.25.12
+go 1.26.0
 
 require (
 	github.com/grafana/sobek v0.0.0-20260429085637-a66d4790012b
 	github.com/hamba/avro/v2 v2.31.0
 	github.com/pavlo-v-chernykh/keystore-go/v4 v4.5.0
 	github.com/stretchr/testify v1.11.1
-	github.com/twmb/franz-go v1.21.5
-	github.com/twmb/franz-go/pkg/kmsg v1.13.1
+	github.com/twmb/franz-go v1.22.1
+	github.com/twmb/franz-go/pkg/kmsg v1.14.0
 	go.k6.io/k6/v2 v2.1.0
 )
 
@@ -30,13 +28,13 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.19.0 // indirect
+	github.com/klauspost/compress v1.20.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mstoykov/atlas v0.0.0-20220811071828-388f114305dd // indirect
-	github.com/pierrec/lz4/v4 v4.1.27 // indirect
+	github.com/pierrec/lz4/v4 v4.1.30 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/serenize/snaker v0.0.0-20201027110005-a7ad2135616e // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
@@ -50,7 +48,6 @@ require (
 	go.opentelemetry.io/otel/sdk v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
-	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
