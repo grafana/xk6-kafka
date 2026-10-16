@@ -1,8 +1,6 @@
 module github.com/grafana/xk6-kafka
 
-go 1.25.0
-
-toolchain go1.25.12
+go 1.26.0
 
 require (
 	github.com/grafana/sobek v0.0.0-20260429085637-a66d4790012b
@@ -10,7 +8,7 @@ require (
 	github.com/pavlo-v-chernykh/keystore-go/v4 v4.5.0
 	github.com/stretchr/testify v1.11.1
 	github.com/twmb/franz-go v1.21.5
-	github.com/twmb/franz-go/pkg/kmsg v1.13.1
+	github.com/twmb/franz-go/pkg/kmsg v1.15.0
 	go.k6.io/k6/v2 v2.1.0
 )
 
