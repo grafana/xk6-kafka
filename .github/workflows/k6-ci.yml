@@ -14,11 +14,11 @@ permissions:
 
 jobs:
   ci:
-    uses: grafana/k6-ci/.github/workflows/all.yml@9477260e6838640d56c28aa95bcbf9a884ab21f3
+    uses: grafana/k6-ci/.github/workflows/all.yml@7dc7a71c57a30eddd3f1591ee0cc5abaeedafa14 # v0.5.4
     with:
       # This repo is an xk6 extension, so keep extension testing on.
       skip-extension-testing: false
       # Run the multi-version Go tests.
       skip-tests: false
       # Pin to the same SHA as the `uses:` line above for a reproducible lint config.
-      k6-ci-ref: 9477260e6838640d56c28aa95bcbf9a884ab21f3
+      k6-ci-ref: 7dc7a71c57a30eddd3f1591ee0cc5abaeedafa14
