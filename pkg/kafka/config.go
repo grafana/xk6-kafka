@@ -7,7 +7,7 @@ package kafka
 // SASLConfig configures SASL authentication.
 type SASLConfig struct {
 	Username   string `js:"username"`
-	Password   string `js:"password"` //nolint:gosec // config field name, not a hardcoded credential
+	Password   string `js:"password"`
 	Algorithm  string `js:"algorithm"`
 	AWSProfile string `js:"awsProfile"`
 }
@@ -32,7 +32,7 @@ type ConnectionConfig struct {
 // JKSConfig configures loading a Java KeyStore.
 type JKSConfig struct {
 	Path     string `js:"path"`
-	Password string `js:"password"` //nolint:gosec // config field name, not a hardcoded credential
+	Password string `js:"password"`
 	// ClientCertAlias is accepted for contract compatibility but not used: the
 	// client certificate chain comes from the private-key entry (ClientKeyAlias).
 	ClientCertAlias   string `js:"clientCertAlias"`

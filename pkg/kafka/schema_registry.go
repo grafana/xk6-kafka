@@ -37,7 +37,7 @@ var errProtobufUnsupported = errors.New(
 // BasicAuth holds Schema Registry basic auth credentials.
 type BasicAuth struct {
 	Username string `js:"username"`
-	Password string `js:"password"` //nolint:gosec // not a real secret
+	Password string `js:"password"`
 }
 
 // Schema represents a schema fetched from or registered with Schema Registry.
@@ -143,7 +143,7 @@ func NewSchemaRegistry(vu modules.VU, config *SchemaRegistryConfig) (*SchemaRegi
 		req.SetBasicAuth(config.BasicAuth.Username, config.BasicAuth.Password)
 	}
 
-	resp, err := httpClient.Do(req) //nolint:gosec // registry URL is configured, not user input
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("SchemaRegistry: failed to reach registry at %s: %w", config.URL, err)
 	}
@@ -241,7 +241,7 @@ func (sr *SchemaRegistry) getSchema(subject string, version *int) (*Schema, erro
 		req.SetBasicAuth(sr.config.BasicAuth.Username, sr.config.BasicAuth.Password)
 	}
 
-	resp, err := sr.client.Do(req) //nolint:gosec // registry URL is configured, not user input
+	resp, err := sr.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("SchemaRegistry: request failed: %w", err)
 	}
@@ -312,7 +312,7 @@ func (sr *SchemaRegistry) createSchema(subject string, schemaStr string, schemaT
 		req.SetBasicAuth(sr.config.BasicAuth.Username, sr.config.BasicAuth.Password)
 	}
 
-	resp, err := sr.client.Do(req) //nolint:gosec // registry URL is configured, not user input
+	resp, err := sr.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("SchemaRegistry: request failed: %w", err)
 	}
@@ -477,7 +477,7 @@ func coerceBytes(v any) ([]byte, bool) {
 	if !rv.IsValid() {
 		return nil, true
 	}
-	if rv.Kind() == reflect.Ptr {
+	if rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			return nil, true
 		}
@@ -499,7 +499,7 @@ func coerceBytes(v any) ([]byte, bool) {
 }
 
 func coerceByte(v reflect.Value) (byte, bool) {
-	for v.IsValid() && (v.Kind() == reflect.Interface || v.Kind() == reflect.Ptr) {
+	for v.IsValid() && (v.Kind() == reflect.Interface || v.Kind() == reflect.Pointer) {
 		if v.IsNil() {
 			return 0, false
 		}
@@ -636,7 +636,7 @@ func coerceNumber(v any) (float64, bool) {
 	if !rv.IsValid() {
 		return 0, false
 	}
-	for rv.Kind() == reflect.Interface || rv.Kind() == reflect.Ptr {
+	for rv.Kind() == reflect.Interface || rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			return 0, false
 		}
