@@ -6,7 +6,7 @@ toolchain go1.26.11
 
 require (
 	github.com/grafana/sobek v0.0.0-20260908083152-4698bc773ae7
-	github.com/hamba/avro/v2 v2.31.0
+	github.com/iskorotkov/avro/v2 v2.35.0
 	github.com/pavlo-v-chernykh/keystore-go/v4 v4.5.0
 	github.com/stretchr/testify v1.12.1
 	github.com/twmb/franz-go v1.21.5
@@ -29,16 +29,14 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grafana/sobek-webapi-encoding v0.1.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
-	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.20.2 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
-	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mstoykov/atlas v0.0.0-20220811071828-388f114305dd // indirect
 	github.com/pierrec/lz4/v4 v4.1.27 // indirect
 	github.com/serenize/snaker v0.0.0-20201027110005-a7ad2135616e // indirect
-	github.com/sirupsen/logrus v1.9.4 // indirect
+	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.46.0 // indirect

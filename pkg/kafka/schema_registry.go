@@ -19,7 +19,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/grafana/sobek"
-	"github.com/hamba/avro/v2"
+	"github.com/iskorotkov/avro/v2"
 	"go.k6.io/k6/v2/js/modules"
 )
 
